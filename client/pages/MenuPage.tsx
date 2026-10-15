@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import CheckoutPage from "../components/checkout/CheckoutPage";
+import MuxVideoPlayer from "../components/MuxVideoPlayer";
 import { menuItemFromDatabaseRow, MenuItem } from "../lib/menuData";
 import { supabase } from "../lib/supabase";
 import { clearPendingCheckout, getPendingCheckout, type ResumableMenuOrder } from "../lib/flutterwave";
@@ -437,14 +438,15 @@ const MenuPage = () => {
                   Categories
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="flex gap-2 overflow-x-auto pb-2 md:flex-col md:overflow-visible md:pb-0">
                 {categories.map((category) => (
                   <Button
                     key={category.id}
                     variant={
                       selectedCategory === category.id ? "default" : "ghost"
                     }
-                    className={`w-full justify-start gap-2 ${
+                    aria-pressed={selectedCategory === category.id}
+                    className={`w-auto shrink-0 justify-start gap-2 md:w-full ${
                       selectedCategory === category.id
                         ? "sheraton-gradient text-white"
                         : ""
@@ -485,8 +487,38 @@ const MenuPage = () => {
 
           {/* Menu Items */}
           <div className="lg:col-span-3">
-            <div className="grid grid-cols-1 gap-6">
-              {filteredItems.map((item) => {
+            {filteredItems.length === 0 ? (
+              <Card className="border-dashed bg-card/80">
+                <CardContent className="flex min-h-56 flex-col items-center justify-center px-6 py-10 text-center">
+                  {menuItemsReady ? (
+                    <>
+                      <Utensils className="mb-4 h-8 w-8 text-sheraton-gold" aria-hidden="true" />
+                      <h2 className="text-lg font-semibold">
+                        {menuItems.length === 0 ? "Menu coming soon" : "No dishes match your search"}
+                      </h2>
+                      <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                        {menuItems.length === 0
+                          ? "Our team is preparing the menu. Please check back shortly."
+                          : "Try another search or clear your filters to see more dishes."}
+                      </p>
+                      {menuItems.length > 0 && (
+                        <Button
+                          variant="outline"
+                          className="mt-4"
+                          onClick={() => { setSearchTerm(""); setSelectedCategory("all"); }}
+                        >
+                          Clear filters
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground" role="status">Loading menu…</p>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 gap-6">
+                {filteredItems.map((item) => {
                 const availability = getAvailabilityStatus(item);
                 const cartQuantity = cart[item.id] || 0;
                 const discountPercent = item.originalPrice > item.price
@@ -529,7 +561,7 @@ const MenuPage = () => {
                                     {item.trending && (
                                       <Badge
                                         variant="secondary"
-                                        className="bg-red-100 text-red-600"
+                                        className="border-transparent bg-destructive/10 text-destructive"
                                       >
                                         <TrendingUp className="h-3 w-3 mr-1" />
                                         Trending
@@ -575,7 +607,7 @@ const MenuPage = () => {
                                   {formatPrice(item.price, item.currency)}
                                 </span>
                                 {discountPercent > 0 && (
-                                  <Badge className="bg-red-100 text-red-700">
+                                  <Badge className="border-transparent bg-destructive/10 text-destructive">
                                     {discountPercent}% off
                                   </Badge>
                                 )}
@@ -595,33 +627,37 @@ const MenuPage = () => {
                           </div>
 
                           {/* Detailed Information */}
-                          <div className="mb-4 rounded-lg bg-gray-50 p-3 md:p-4">
-                            <p className="mb-2 break-words text-sm text-gray-700">
-                              {item.description_full}
-                            </p>
-                            {item.chef_note && (
-                              <div className="flex items-center gap-2 text-xs text-sheraton-gold">
-                                <ChefHat className="h-3 w-3" />
-                                <span className="break-words italic">{item.chef_note}</span>
-                              </div>
-                            )}
-                          </div>
+                          {(item.description_full !== item.description || item.chef_note) && (
+                            <div className="mb-4 rounded-lg bg-muted/60 p-3 text-card-foreground md:p-4">
+                              {item.description_full !== item.description && (
+                                <p className="mb-2 break-words text-sm text-muted-foreground">
+                                  {item.description_full}
+                                </p>
+                              )}
+                              {item.chef_note && (
+                                <div className="flex items-center gap-2 text-xs text-sheraton-gold">
+                                  <ChefHat className="h-3 w-3" />
+                                  <span className="break-words italic">{item.chef_note}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           {/* Dish media */}
                           {item.mediaUrl && (
-                            <div className="mb-4 flex flex-col items-center gap-2 rounded-lg border border-border/60 bg-white p-3">
+                            <div className="mb-4 flex flex-col items-center gap-2 rounded-xl border border-border/60 bg-muted/30 p-2 sm:p-3">
                               {item.mediaType === "video" ? (
-                                <video
-                                  src={item.mediaUrl}
-                                  controls
-                                  className="aspect-video max-h-56 w-full max-w-xl rounded-md object-contain md:aspect-auto md:max-h-64"
-                                  aria-label={`${item.name} video`}
+                                <MuxVideoPlayer
+                                  key={`${item.id}-${item.mediaAttachmentId}`}
+                                  attachmentId={item.mediaAttachmentId}
+                                  b2Url={item.mediaUrl}
                                 />
                               ) : (
                                 <img
                                   src={item.mediaUrl}
                                   alt={`${item.name} dish`}
-                                  className="max-h-64 w-full max-w-xl rounded-md object-contain"
+                                  loading="lazy"
+                                  className="max-h-64 w-full max-w-xl rounded-lg object-contain"
                                 />
                               )}
                               <Badge variant="outline" className="gap-1 text-xs">
@@ -727,8 +763,9 @@ const MenuPage = () => {
                     </CardContent>
                   </Card>
                 );
-              })}
-            </div>
+                })}
+              </div>
+            )}
           </div>
         </div>
 

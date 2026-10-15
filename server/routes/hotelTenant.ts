@@ -318,6 +318,48 @@ export const getPublicMenuItems: RequestHandler = async (request, response) => {
   }
 };
 
+export const getPublicMenuVideo: RequestHandler = async (request, response) => {
+  try {
+    const { attachmentId } = request.params;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attachmentId)) {
+      response.status(400).json({ error: "Invalid menu media" });
+      return;
+    }
+
+    const tenant = await resolveRequestHotelTenant(request);
+    const organizationId = encodeURIComponent(tenant.organizationId);
+    const encodedAttachmentId = encodeURIComponent(attachmentId);
+    const menuItems = await readService<Array<{ id: string }>>(
+      `menu_items?organization_id=eq.${organizationId}&media_attachment_id=eq.${encodedAttachmentId}&media_type=eq.video&is_published=eq.true&select=id&limit=1`,
+    );
+    if (menuItems.length === 0) {
+      response.status(404).json({ error: "Menu video was not found" });
+      return;
+    }
+
+    const attachments = await readService<Array<{ filename: string }>>(
+      `attachments?id=eq.${encodedAttachmentId}&select=filename&limit=1`,
+    );
+    if (attachments.length === 0) {
+      response.status(404).json({ error: "Menu video was not found" });
+      return;
+    }
+
+    const filename = encodeURIComponent(attachments[0].filename);
+    const videos = await readService<Array<{ playback_id: string | null; status: string }>>(
+      `video_uploads?filename=eq.${filename}&select=playback_id,status&limit=1`,
+    );
+    const video = videos[0];
+    setPrivateTenantResponse(response);
+    response.json({
+      status: video?.status || "pending",
+      playbackId: video?.status === "ready" ? video.playback_id : null,
+    });
+  } catch (error) {
+    response.status(404).json({ error: error instanceof Error ? error.message : "Menu video could not be loaded" });
+  }
+};
+
 export const getPublicSpecialEvents: RequestHandler = async (request, response) => {
   try {
     const tenant = await resolveRequestHotelTenant(request);

@@ -38,6 +38,7 @@ import {
   getPublicHotelBookingData,
   submitHotelComplaint,
   getPublicMenuItems,
+  getPublicMenuVideo,
   getPublicSpecialEvents,
   getTenantRoomAvailability,
   deleteHotelEventProposal,
@@ -70,6 +71,7 @@ export function createServer() {
   app.post("/api/hotel-complaints", submitHotelComplaint);
   app.get("/api/hotel-booking-data", getPublicHotelBookingData);
   app.get("/api/hotel-menu-items", getPublicMenuItems);
+  app.get("/api/hotel-menu-video/:attachmentId", getPublicMenuVideo);
   app.get("/api/hotel-events", getPublicSpecialEvents);
   app.post("/api/hotel-event-proposals/submit", submitHotelEventProposal);
   app.post("/api/hotel-event-proposals/review", reviewHotelEventProposal);

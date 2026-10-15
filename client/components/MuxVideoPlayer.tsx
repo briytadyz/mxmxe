@@ -3,16 +3,18 @@ import MuxPlayer from '@mux/mux-player-react';
 import { supabase } from '../lib/supabase';
 
 interface MuxVideoPlayerProps {
-  filename: string;
   b2Url: string;
+  attachmentId?: string;
+  filename?: string;
 }
 
 export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
-  filename,
   b2Url,
+  attachmentId,
+  filename,
 }) => {
   const [playbackId, setPlaybackId] = useState<string | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -21,22 +23,42 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
 
     const fetch = async () => {
       try {
-        const { data: video } = await supabase
-          .from('video_uploads')
-          .select('playback_id, status')
-          .eq('filename', filename)
-          .maybeSingle();
+        let nextPlaybackId: string | null = null;
+        let status: string | null = null;
+
+        if (attachmentId) {
+          const response = await window.fetch(`/api/hotel-menu-video/${encodeURIComponent(attachmentId)}`, { cache: "no-store" });
+          if (!response.ok) return;
+          const video = await response.json() as { playbackId: string | null; status: string };
+          nextPlaybackId = video.playbackId;
+          status = video.status;
+        } else if (filename) {
+          const { data: video } = await supabase
+            .from('video_uploads')
+            .select('playback_id, status')
+            .eq('filename', filename)
+            .maybeSingle();
+          nextPlaybackId = video?.playback_id || null;
+          status = video?.status || null;
+        }
 
         if (!isMountedRef.current) return;
 
-        if (video?.playback_id && video.status === 'ready') {
-          setPlaybackId(video.playback_id);
-        } else if (video?.status === 'processing' && retries < 3) {
+        if (nextPlaybackId && status === 'ready') {
+          setPlaybackId(nextPlaybackId);
+        } else if (
+          attachmentId
+            ? status !== 'failed' && status !== 'errored' && retries < 24
+            : status === 'processing' && retries < 3
+        ) {
           retries++;
-          timeoutRef.current = setTimeout(fetch, 1500);
+          timeoutRef.current = setTimeout(fetch, attachmentId ? 2500 : 1500);
         }
-      } catch (e) {
-        // Silently fail, use B2 fallback
+      } catch {
+        if (isMountedRef.current && attachmentId && retries < 24) {
+          retries++;
+          timeoutRef.current = setTimeout(fetch, 2500);
+        }
       }
     };
 
@@ -46,7 +68,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
       isMountedRef.current = false;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [filename]);
+  }, [attachmentId, filename]);
 
   if (playbackId) {
     return (
@@ -54,7 +76,6 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
         <MuxPlayer
           playbackId={playbackId}
           streamType="on-demand"
-          controls
           style={{ width: '100%', height: '100%' }}
         />
       </div>
@@ -63,7 +84,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
 
   return (
     <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
-      <video src={b2Url} controls className="w-full h-full object-contain" />
+      <video src={b2Url} controls playsInline preload="metadata" className="w-full h-full object-contain" />
     </div>
   );
 };
