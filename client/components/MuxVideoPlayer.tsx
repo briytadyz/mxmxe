@@ -14,8 +14,17 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   filename,
 }) => {
   const [playbackId, setPlaybackId] = useState<string | null>(null);
+  const [aspectRatio, setAspectRatio] = useState(16 / 9);
+  const [viewportHeight, setViewportHeight] = useState(720);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    const updateViewportHeight = () => setViewportHeight(window.innerHeight);
+    updateViewportHeight();
+    window.addEventListener("resize", updateViewportHeight);
+    return () => window.removeEventListener("resize", updateViewportHeight);
+  }, []);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -70,21 +79,47 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
     };
   }, [attachmentId, filename]);
 
+  const frameStyle: React.CSSProperties = {
+    aspectRatio,
+    width: aspectRatio < 1 ? `${Math.min(448, viewportHeight * 0.7 * aspectRatio)}px` : "100%",
+    maxHeight: "70svh",
+    maxWidth: aspectRatio < 1 ? "100%" : `min(100%, calc(70svh * ${aspectRatio}))`,
+  };
+  const muxPlayerStyle = {
+    width: "100%",
+    height: "100%",
+    "--media-object-fit": "contain",
+  } as React.CSSProperties & { [key: `--${string}`]: string | undefined };
+  const updateAspectRatio = (width: number, height: number) => {
+    if (width > 0 && height > 0) setAspectRatio(width / height);
+  };
+
   if (playbackId) {
     return (
-      <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
+      <div className="mx-auto w-full overflow-hidden rounded-xl bg-black shadow-md" style={frameStyle}>
         <MuxPlayer
           playbackId={playbackId}
           streamType="on-demand"
-          style={{ width: '100%', height: '100%' }}
+          onLoadedMetadata={(event) => {
+            const video = event.currentTarget as typeof event.currentTarget & { videoWidth: number; videoHeight: number };
+            updateAspectRatio(video.videoWidth, video.videoHeight);
+          }}
+          style={muxPlayerStyle}
         />
       </div>
     );
   }
 
   return (
-    <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
-      <video src={b2Url} controls playsInline preload="metadata" className="w-full h-full object-contain" />
+    <div className="mx-auto w-full overflow-hidden rounded-xl bg-black shadow-md" style={frameStyle}>
+      <video
+        src={b2Url}
+        controls
+        playsInline
+        preload="metadata"
+        onLoadedMetadata={(event) => updateAspectRatio(event.currentTarget.videoWidth, event.currentTarget.videoHeight)}
+        className="h-full w-full object-contain"
+      />
     </div>
   );
 };

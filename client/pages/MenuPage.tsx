@@ -600,6 +600,24 @@ const MenuPage = () => {
                     }`}
                   >
                     <CardContent className="p-0">
+                      {item.mediaUrl && (
+                        item.mediaType === "video" ? (
+                          <div className="w-full bg-black px-2 py-3 sm:px-4">
+                            <MuxVideoPlayer
+                              key={`${item.id}-${item.mediaAttachmentId}`}
+                              attachmentId={item.mediaAttachmentId}
+                              b2Url={item.mediaUrl}
+                            />
+                          </div>
+                        ) : (
+                          <img
+                            src={item.mediaUrl}
+                            alt={`${item.name} dish`}
+                            loading="lazy"
+                            className="max-h-96 w-full aspect-[4/3] object-cover sm:aspect-[16/9]"
+                          />
+                        )
+                      )}
                       <div className="flex flex-col md:flex-row">
                         {/* Item Image and Basic Info */}
                         <div className="min-w-0 flex-1 p-4 md:p-6">
@@ -703,29 +721,6 @@ const MenuPage = () => {
                                   <span className="break-words italic">{item.chef_note}</span>
                                 </div>
                               )}
-                            </div>
-                          )}
-
-                          {/* Dish media */}
-                          {item.mediaUrl && (
-                            <div className="mb-4 flex flex-col items-center gap-2 rounded-xl border border-border/60 bg-muted/30 p-2 sm:p-3">
-                              {item.mediaType === "video" ? (
-                                <MuxVideoPlayer
-                                  key={`${item.id}-${item.mediaAttachmentId}`}
-                                  attachmentId={item.mediaAttachmentId}
-                                  b2Url={item.mediaUrl}
-                                />
-                              ) : (
-                                <img
-                                  src={item.mediaUrl}
-                                  alt={`${item.name} dish`}
-                                  loading="lazy"
-                                  className="max-h-64 w-full max-w-xl rounded-lg object-contain"
-                                />
-                              )}
-                              <Badge variant="outline" className="gap-1 text-xs">
-                                {item.mediaType === "video" ? "Video" : "Image"}
-                              </Badge>
                             </div>
                           )}
 
