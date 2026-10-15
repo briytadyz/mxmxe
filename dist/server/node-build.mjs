@@ -281,6 +281,26 @@ const getPublicMenuItems = async (request, response) => {
     response.status(404).json({ error: error instanceof Error ? error.message : "Menu information could not be loaded" });
   }
 };
+const requestHotelMenuAvailability = async (request, response) => {
+  try {
+    const tenant = await resolveRequestHotelTenant(request);
+    const userId = await getAuthenticatedUserId$2(request.headers.authorization);
+    const { menuItemId } = request.body;
+    if (!isUuid$1(menuItemId)) {
+      response.status(400).json({ error: "Select a valid menu item" });
+      return;
+    }
+    const subscribed = await callTenantRpc("request_menu_item_availability_for_tenant", {
+      target_user_id: userId,
+      target_organization_id: tenant.organizationId,
+      target_menu_item_id: menuItemId
+    });
+    setPrivateTenantResponse(response);
+    response.json({ subscribed });
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : "Availability request could not be saved" });
+  }
+};
 const getPublicMenuVideo = async (request, response) => {
   try {
     const { attachmentId } = request.params;
@@ -1809,6 +1829,7 @@ function createServer() {
   app2.get("/api/hotel-booking-data", getPublicHotelBookingData);
   app2.get("/api/hotel-menu-items", getPublicMenuItems);
   app2.get("/api/hotel-menu-video/:attachmentId", getPublicMenuVideo);
+  app2.post("/api/hotel-menu-availability", requestHotelMenuAvailability);
   app2.get("/api/hotel-events", getPublicSpecialEvents);
   app2.post("/api/hotel-event-proposals/submit", submitHotelEventProposal);
   app2.post("/api/hotel-event-proposals/review", reviewHotelEventProposal);

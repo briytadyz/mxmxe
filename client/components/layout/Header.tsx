@@ -677,7 +677,9 @@ const Header = () => {
                                                 ? "Hotel sale recorded"
                                                 : notification.type === "hotel_loyalty_activity"
                                                   ? "Hotel loyalty activity"
-                                                  : "Task Update"}
+                                                  : notification.type === "menu_item_available"
+                                                    ? "Dish back in stock"
+                                                    : "Task Update"}
                               </p>
                               <p className="text-xs text-muted-foreground line-clamp-2">
                                 {notification.message}

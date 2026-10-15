@@ -83,7 +83,7 @@ export interface Notification {
   user_id: string
   complaint_id: string | null
   task_id: string | null
-  type: 'complaint_filed' | 'complaint_acknowledged' | 'task_created' | 'task_updated' | 'task_assigned' | 'task_accepted' | 'task_declined' | 'task_proposed' | 'proposal_accepted' | 'proposal_declined' | 'proposal_updated' | 'todo_created' | 'task_message' | 'event_proposal_submitted' | 'event_proposal_updated' | 'event_proposal_scheduled' | 'event_proposal_declined' | 'event_published' | 'event_invitation_received' | 'event_invitation_responded' | 'personal_purchase_recorded' | 'personal_purchase_refunded' | 'hotel_purchase_recorded' | 'hotel_loyalty_activity'
+  type: 'complaint_filed' | 'complaint_acknowledged' | 'task_created' | 'task_updated' | 'task_assigned' | 'task_accepted' | 'task_declined' | 'task_proposed' | 'proposal_accepted' | 'proposal_declined' | 'proposal_updated' | 'todo_created' | 'task_message' | 'event_proposal_submitted' | 'event_proposal_updated' | 'event_proposal_scheduled' | 'event_proposal_declined' | 'event_published' | 'event_invitation_received' | 'event_invitation_responded' | 'personal_purchase_recorded' | 'personal_purchase_refunded' | 'hotel_purchase_recorded' | 'hotel_loyalty_activity' | 'menu_item_available'
   event_proposal_id: string | null
   event_invitation_id: string | null
   action_url: string | null

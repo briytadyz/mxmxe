@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import CheckoutPage from "../components/checkout/CheckoutPage";
 import MuxVideoPlayer from "../components/MuxVideoPlayer";
@@ -64,6 +65,9 @@ import {
 
 const MenuPage = () => {
   const { tenant } = useHotelTenant();
+  const navigate = useNavigate();
+  const [availabilitySubscriptions, setAvailabilitySubscriptions] = useState<Set<string>>(new Set());
+  const [subscribingItemId, setSubscribingItemId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [cart, setCart] = useState<{ [key: string]: number }>({});
@@ -211,6 +215,65 @@ const MenuPage = () => {
       .finally(() => { if (active) setMenuItemsReady(true); });
     return () => { active = false; };
   }, [tenant?.organizationId]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadAvailabilitySubscriptions = async () => {
+      if (!tenant) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("menu_availability_subscriptions")
+        .select("menu_item_id")
+        .eq("user_id", user.id)
+        .eq("organization_id", tenant.organizationId);
+      if (error) throw error;
+      if (active) setAvailabilitySubscriptions(new Set((data || []).map((row) => row.menu_item_id)));
+    };
+
+    loadAvailabilitySubscriptions().catch((error) => console.error("Unable to load menu availability requests", error));
+    return () => { active = false; };
+  }, [tenant?.organizationId]);
+
+  const requestMenuAvailability = async (item: MenuItem) => {
+    const itemId = item.databaseId;
+    if (!itemId) return;
+
+    setSubscribingItemId(itemId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast("Sign in to get a restock notification", {
+          action: { label: "Sign in", onClick: () => navigate("/login?returnTo=%2Fmenu") },
+        });
+        return;
+      }
+
+      const response = await fetch("/api/hotel-menu-availability", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ menuItemId: itemId }),
+      });
+      const result = await response.json().catch(() => null) as { subscribed?: boolean } | null;
+      if (!response.ok || !result) throw new Error("Unable to save availability request");
+      if (!result.subscribed) {
+        toast.message("This dish is available now. Refresh the menu to order it.");
+        return;
+      }
+
+      setAvailabilitySubscriptions((current) => new Set(current).add(itemId));
+      toast.success("We’ll notify you when this dish is back.");
+    } catch {
+      toast.error("We couldn’t save your restock request. Please try again.");
+    } finally {
+      setSubscribingItemId(null);
+    }
+  };
 
   const filteredItems = menuItems.filter((item) => {
     const matchesSearch =
@@ -751,10 +814,16 @@ const MenuPage = () => {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="w-full text-sheraton-gold border-sheraton-gold md:w-auto"
+                                className="w-full border-sheraton-gold text-sheraton-gold md:w-auto"
+                                disabled={availabilitySubscriptions.has(item.databaseId || "") || subscribingItemId === item.databaseId}
+                                onClick={() => void requestMenuAvailability(item)}
                               >
-                                <Bell className="h-4 w-4 mr-2" />
-                                Notify When Available
+                                <Bell className="mr-2 h-4 w-4" />
+                                {subscribingItemId === item.databaseId
+                                  ? "Saving request…"
+                                  : availabilitySubscriptions.has(item.databaseId || "")
+                                    ? "You’ll be notified"
+                                    : "Notify When Available"}
                               </Button>
                             )}
                           </div>
