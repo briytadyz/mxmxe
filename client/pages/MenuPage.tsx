@@ -587,6 +587,7 @@ const MenuPage = () => {
                 const discountPercent = item.originalPrice > item.price
                   ? Math.round((1 - item.price / item.originalPrice) * 100)
                   : 0;
+                const isVideoItem = item.mediaType === "video" && Boolean(item.mediaUrl);
                 const customStatuses = item.statuses || [];
                 const statusLabels = availability.status === "out"
                   ? ["Sold out", ...customStatuses.filter((status) => status.toLowerCase() !== "available" && status.toLowerCase() !== "sold out")]
@@ -602,11 +603,69 @@ const MenuPage = () => {
                     <CardContent className="p-0">
                       {item.mediaUrl && (
                         item.mediaType === "video" ? (
-                          <div className="w-full bg-black px-2 py-3 sm:px-4">
+                          <div className="w-full">
                             <MuxVideoPlayer
                               key={`${item.id}-${item.mediaAttachmentId}`}
                               attachmentId={item.mediaAttachmentId}
                               b2Url={item.mediaUrl}
+                              controlsMode="minimal"
+                              presentation="immersive"
+                              overlay={(
+                                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-4 pb-4 pt-20 text-white sm:px-6 sm:pb-5">
+                                  <div className="pointer-events-auto flex items-end justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                      <h3 className="truncate text-lg font-semibold drop-shadow-sm sm:text-xl">{item.name}</h3>
+                                      {item.special_offer && (
+                                        <p className="mt-0.5 truncate text-xs font-medium text-white/85 sm:text-sm">{item.special_offer}</p>
+                                      )}
+                                      <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                        <span className="text-lg font-bold sm:text-xl">{formatPrice(item.price, item.currency)}</span>
+                                        {discountPercent > 0 && (
+                                          <>
+                                            <span className="text-xs text-white/70 line-through">{formatPrice(item.originalPrice, item.currency)}</span>
+                                            <span className="text-xs font-semibold text-amber-200">{discountPercent}% off</span>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {cartQuantity > 0 ? (
+                                      <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 rounded-full bg-white/15 p-1 backdrop-blur-sm">
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          aria-label={`Remove one ${item.name} from order`}
+                                          className="h-9 w-9 text-white hover:bg-white/20 hover:text-white"
+                                          onClick={() => removeFromCart(item.id)}
+                                        >
+                                          <Minus className="h-4 w-4" />
+                                        </Button>
+                                        <span className="min-w-5 text-center text-sm font-semibold" aria-label={`${cartQuantity} in order`}>{cartQuantity}</span>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          aria-label={`Add one ${item.name} to order`}
+                                          className="h-9 w-9 text-white hover:bg-white/20 hover:text-white"
+                                          onClick={() => addToCart(item.id)}
+                                          disabled={item.availability === 0}
+                                        >
+                                          <Plus className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    ) : item.availability > 0 ? (
+                                      <Button
+                                        onClick={() => addToCart(item.id)}
+                                        className="pointer-events-auto h-10 shrink-0 rounded-full bg-sheraton-gold px-4 text-sheraton-navy shadow-lg hover:bg-sheraton-gold/90"
+                                      >
+                                        <Plus className="mr-1.5 h-4 w-4" />
+                                        <span className="hidden sm:inline">Add to order</span>
+                                        <span className="sm:hidden">Add</span>
+                                      </Button>
+                                    ) : (
+                                      <span className="shrink-0 rounded-full bg-black/45 px-3 py-2 text-xs font-medium text-white/90">Sold out</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             />
                           </div>
                         ) : (
@@ -623,12 +682,14 @@ const MenuPage = () => {
                         <div className="min-w-0 flex-1 p-4 md:p-6">
                           <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                             <div className="flex min-w-0 items-start gap-3 md:items-center md:gap-4">
-                              <div className="shrink-0 text-4xl md:text-5xl" aria-hidden="true">{item.image}</div>
+                              {!isVideoItem && <div className="shrink-0 text-4xl md:text-5xl" aria-hidden="true">{item.image}</div>}
                               <div className="min-w-0">
                                 <div className="mb-1 flex flex-wrap items-start gap-2">
-                                  <h3 className="break-words text-lg font-bold text-sheraton-navy md:text-xl">
-                                    {item.name}
-                                  </h3>
+                                  {!isVideoItem && (
+                                    <h3 className="break-words text-lg font-bold text-sheraton-navy md:text-xl">
+                                      {item.name}
+                                    </h3>
+                                  )}
                                   <div className="flex flex-wrap items-center gap-1.5" aria-label={`${item.name} status`}>
                                     {statusLabels.map((status) => (
                                       <Badge
@@ -677,7 +738,7 @@ const MenuPage = () => {
                             </div>
 
                             {/* Price and Availability */}
-                            <div className="w-full text-left md:w-auto md:text-right">
+                            {!isVideoItem && <div className="w-full text-left md:w-auto md:text-right">
                               <div className="mb-2 flex flex-wrap items-center gap-2">
                                 {discountPercent > 0 && (
                                   <span className="text-sm text-muted-foreground line-through" aria-label={`Original price ${formatPrice(item.originalPrice, item.currency)}`}>
@@ -704,7 +765,7 @@ const MenuPage = () => {
                                   {item.availability} left
                                 </div>
                               )}
-                            </div>
+                            </div>}
                           </div>
 
                           {/* Detailed Information */}
@@ -771,7 +832,7 @@ const MenuPage = () => {
 
                           {/* Add to Cart */}
                           <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
-                            <div className="flex items-center gap-3">
+                            {!isVideoItem && <div className="flex items-center gap-3">
                               {cartQuantity > 0 ? (
                                 <div className="flex items-center gap-2">
                                   <Button
@@ -803,7 +864,7 @@ const MenuPage = () => {
                                   Add to Order
                                 </Button>
                               )}
-                            </div>
+                            </div>}
 
                             {item.availability === 0 && (
                               <Button
