@@ -43,6 +43,32 @@ export const resolveRequestHotelTenant = async (request: Request): Promise<Resol
   const hostname = hostnameFromRequest(request);
   if (!hostname) throw new Error("Hotel domain is missing");
 
+  const previewOrganizationId = process.env.BUILDER_PREVIEW_TENANT_ORGANIZATION_ID;
+  if (process.env.NODE_ENV === "development" && hostname.endsWith(".projects.builder.my") && previewOrganizationId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(previewOrganizationId)) {
+      throw new Error("Builder preview tenant configuration is invalid");
+    }
+    const previewTenants = await readService<Array<{
+      organization_id: string;
+      display_name: string;
+      logo_url: string | null;
+      primary_color: string | null;
+      accent_color: string | null;
+    }>>(
+      `hotel_tenant_settings?organization_id=eq.${encodeURIComponent(previewOrganizationId)}&is_active=eq.true&select=organization_id,display_name,logo_url,primary_color,accent_color&limit=1`,
+    );
+    const previewTenant = previewTenants[0];
+    if (!previewTenant) throw new Error("Builder preview hotel is not active");
+    return {
+      organizationId: previewTenant.organization_id,
+      domain: hostname,
+      name: previewTenant.display_name,
+      logoUrl: previewTenant.logo_url,
+      primaryColor: previewTenant.primary_color,
+      accentColor: previewTenant.accent_color,
+    };
+  }
+
   const { supabaseUrl } = configuration();
   const tenantResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/resolve_hotel_tenant`, {
     method: "POST",
