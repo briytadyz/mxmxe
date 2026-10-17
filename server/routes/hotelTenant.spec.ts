@@ -38,6 +38,32 @@ describe("resolveRequestHotelTenant", () => {
     );
   });
 
+  it("uses a forwarded Builder host when the dev proxy exposes localhost", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VITE_SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("VITE_SUPABASE_ANON_KEY", "anon-key");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-role-key");
+    vi.stubEnv("BUILDER_PREVIEW_TENANT_ORGANIZATION_ID", organizationId);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify([{
+      organization_id: organizationId,
+      display_name: "MisuriStay",
+      logo_url: null,
+      primary_color: null,
+      accent_color: null,
+    }]), { status: 200 })));
+
+    const proxiedRequest = {
+      hostname: "localhost",
+      headers: { "x-forwarded-host": "abc123.projects.builder.my:8080" },
+    } as Parameters<typeof resolveRequestHotelTenant>[0];
+
+    await expect(resolveRequestHotelTenant(proxiedRequest)).resolves.toMatchObject({
+      organizationId,
+      domain: "abc123.projects.builder.my",
+      name: "MisuriStay",
+    });
+  });
+
   it("keeps production tenant resolution tied to the requested verified domain", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("VITE_SUPABASE_URL", "https://example.supabase.co");

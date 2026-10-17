@@ -27,11 +27,15 @@ const serviceHeaders$2 = (json = false) => {
     ...json ? { "content-type": "application/json" } : {}
   };
 };
-const hostnameFromRequest = (request) => request.hostname.toLowerCase().replace(/\.$/, "");
+const hostnameFromRequest = (request) => {
+  const hostname = request.hostname.toLowerCase().replace(/\.$/, "");
+  return hostname;
+};
 const resolveRequestHotelTenant = async (request) => {
   const hostname = hostnameFromRequest(request);
   if (!hostname) throw new Error("Hotel domain is missing");
   process.env.BUILDER_PREVIEW_TENANT_ORGANIZATION_ID;
+  hostname.endsWith(".projects.builder.my") || hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
   const { supabaseUrl } = configuration$2();
   const tenantResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/resolve_hotel_tenant`, {
     method: "POST",

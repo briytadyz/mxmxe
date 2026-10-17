@@ -37,14 +37,30 @@ const serviceHeaders = (json = false) => {
   };
 };
 
-const hostnameFromRequest = (request: Request) => request.hostname.toLowerCase().replace(/\.$/, "");
+const hostnameFromRequest = (request: Request) => {
+  const hostname = request.hostname.toLowerCase().replace(/\.$/, "");
+  if (process.env.NODE_ENV !== "development") return hostname;
+
+  const forwardedHost = request.headers?.["x-forwarded-host"];
+  const forwardedHostname = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost)
+    ?.split(",")[0]
+    .trim()
+    .toLowerCase()
+    .replace(/:\d+$/, "")
+    .replace(/\.$/, "");
+  return forwardedHostname?.endsWith(".projects.builder.my") ? forwardedHostname : hostname;
+};
 
 export const resolveRequestHotelTenant = async (request: Request): Promise<ResolvedHotelTenant> => {
   const hostname = hostnameFromRequest(request);
   if (!hostname) throw new Error("Hotel domain is missing");
 
   const previewOrganizationId = process.env.BUILDER_PREVIEW_TENANT_ORGANIZATION_ID;
-  if (process.env.NODE_ENV === "development" && hostname.endsWith(".projects.builder.my") && previewOrganizationId) {
+  const isBuilderPreviewHost = hostname.endsWith(".projects.builder.my")
+    || hostname === "localhost"
+    || hostname === "127.0.0.1"
+    || hostname === "::1";
+  if (process.env.NODE_ENV === "development" && isBuilderPreviewHost && previewOrganizationId) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(previewOrganizationId)) {
       throw new Error("Builder preview tenant configuration is invalid");
     }
