@@ -10,7 +10,9 @@ interface MuxVideoPlayerProps {
   filename?: string;
   controlsMode?: "default" | "minimal";
   presentation?: "default" | "immersive";
+  portraitAlignment?: "center" | "start";
   overlay?: ReactNode;
+  onAspectRatioChange?: (aspectRatio: number) => void;
 }
 
 export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
@@ -19,7 +21,9 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   filename,
   controlsMode = "default",
   presentation = "default",
+  portraitAlignment = "center",
   overlay,
+  onAspectRatioChange,
 }) => {
   const [playbackId, setPlaybackId] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
@@ -121,11 +125,15 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
     "--controls": controlsMode === "minimal" ? "none" : undefined,
   } as React.CSSProperties & { [key: `--${string}`]: string | undefined };
   const frameClass = presentation === "immersive"
-    ? "relative w-full overflow-hidden bg-black"
+    ? `relative w-full overflow-hidden bg-black ${portraitAlignment === "center" ? "mx-auto" : ""}`
     : "relative mx-auto w-full overflow-hidden rounded-xl bg-black shadow-md";
+  const showOverlay = !(presentation === "immersive" && aspectRatio < 1 && viewportWidth >= 768);
 
   const updateAspectRatio = (width: number, height: number) => {
-    if (width > 0 && height > 0) setAspectRatio(width / height);
+    if (width <= 0 || height <= 0) return;
+    const ratio = width / height;
+    setAspectRatio(ratio);
+    onAspectRatioChange?.(ratio);
   };
 
   const togglePlayback = () => {
@@ -221,7 +229,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
         />
       )}
       {minimalControls}
-      {overlay}
+      {showOverlay && overlay}
     </div>
   );
 };

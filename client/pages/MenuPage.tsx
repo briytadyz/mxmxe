@@ -71,12 +71,20 @@ const MenuPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [cart, setCart] = useState<{ [key: string]: number }>({});
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() => typeof window !== "undefined" && window.innerWidth >= 768);
+  const [portraitVideoItems, setPortraitVideoItems] = useState<Record<string, boolean>>({});
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState("food");
   const [showCheckoutPage, setShowCheckoutPage] = useState(false);
   const [resumableOrder, setResumableOrder] = useState<ResumableMenuOrder | undefined>();
   const [durableCartId, setDurableCartId] = useState<string | null>(null);
   const [cartReady, setCartReady] = useState(false);
+
+  useEffect(() => {
+    const updateViewport = () => setIsDesktopViewport(window.innerWidth >= 768);
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -588,6 +596,7 @@ const MenuPage = () => {
                   ? Math.round((1 - item.price / item.originalPrice) * 100)
                   : 0;
                 const isVideoItem = item.mediaType === "video" && Boolean(item.mediaUrl);
+                const isDesktopPortraitVideo = isVideoItem && isDesktopViewport && portraitVideoItems[item.id] === true;
                 const customStatuses = item.statuses || [];
                 const statusLabels = availability.status === "out"
                   ? ["Sold out", ...customStatuses.filter((status) => status.toLowerCase() !== "available" && status.toLowerCase() !== "sold out")]
@@ -600,16 +609,24 @@ const MenuPage = () => {
                       availability.status === "out" ? "opacity-80" : ""
                     }`}
                   >
-                    <CardContent className="p-0">
+                    <CardContent className={`p-0 ${isDesktopPortraitVideo ? "md:grid md:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.6fr)] md:items-stretch" : ""}`}>
                       {item.mediaUrl && (
                         item.mediaType === "video" ? (
-                          <div className="w-full">
+                          <div className={isDesktopPortraitVideo ? "min-w-0" : "w-full"}>
                             <MuxVideoPlayer
                               key={`${item.id}-${item.mediaAttachmentId}`}
                               attachmentId={item.mediaAttachmentId}
                               b2Url={item.mediaUrl}
                               controlsMode="minimal"
                               presentation="immersive"
+                              portraitAlignment={isDesktopPortraitVideo ? "start" : "center"}
+                              onAspectRatioChange={(ratio) => {
+                                setPortraitVideoItems((current) => {
+                                  const isPortrait = ratio < 1;
+                                  if (current[item.id] === isPortrait) return current;
+                                  return { ...current, [item.id]: isPortrait };
+                                });
+                              }}
                               overlay={(
                                 <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-4 pb-4 pt-20 text-white sm:px-6 sm:pb-5">
                                   <div className="pointer-events-auto flex items-end justify-between gap-3">
@@ -677,7 +694,7 @@ const MenuPage = () => {
                           />
                         )
                       )}
-                      <div className="flex flex-col md:flex-row">
+                      <div className={`flex min-w-0 flex-col md:flex-row ${isDesktopPortraitVideo ? "md:col-start-2" : ""}`}>
                         {/* Item Image and Basic Info */}
                         <div className="min-w-0 flex-1 p-4 md:p-6">
                           <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -685,7 +702,7 @@ const MenuPage = () => {
                               {!isVideoItem && <div className="shrink-0 text-4xl md:text-5xl" aria-hidden="true">{item.image}</div>}
                               <div className="min-w-0">
                                 <div className="mb-1 flex flex-wrap items-start gap-2">
-                                  {!isVideoItem && (
+                                  {(!isVideoItem || isDesktopPortraitVideo) && (
                                     <h3 className="break-words text-lg font-bold text-sheraton-navy md:text-xl">
                                       {item.name}
                                     </h3>
@@ -738,7 +755,7 @@ const MenuPage = () => {
                             </div>
 
                             {/* Price and Availability */}
-                            {!isVideoItem && <div className="w-full text-left md:w-auto md:text-right">
+                            {(!isVideoItem || isDesktopPortraitVideo) && <div className="w-full text-left md:w-auto md:text-right">
                               <div className="mb-2 flex flex-wrap items-center gap-2">
                                 {discountPercent > 0 && (
                                   <span className="text-sm text-muted-foreground line-through" aria-label={`Original price ${formatPrice(item.originalPrice, item.currency)}`}>
@@ -832,7 +849,7 @@ const MenuPage = () => {
 
                           {/* Add to Cart */}
                           <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
-                            {!isVideoItem && <div className="flex items-center gap-3">
+                            {(!isVideoItem || isDesktopPortraitVideo) && <div className="flex items-center gap-3">
                               {cartQuantity > 0 ? (
                                 <div className="flex items-center gap-2">
                                   <Button
