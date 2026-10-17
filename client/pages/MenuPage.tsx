@@ -72,7 +72,7 @@ const MenuPage = () => {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [cart, setCart] = useState<{ [key: string]: number }>({});
   const [isDesktopViewport, setIsDesktopViewport] = useState(() => typeof window !== "undefined" && window.innerWidth >= 768);
-  const [portraitVideoItems, setPortraitVideoItems] = useState<Record<string, boolean>>({});
+  const [mediaAspectRatios, setMediaAspectRatios] = useState<Record<string, number>>({});
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState("food");
   const [showCheckoutPage, setShowCheckoutPage] = useState(false);
@@ -596,7 +596,10 @@ const MenuPage = () => {
                   ? Math.round((1 - item.price / item.originalPrice) * 100)
                   : 0;
                 const isVideoItem = item.mediaType === "video" && Boolean(item.mediaUrl);
-                const isDesktopPortraitVideo = isVideoItem && isDesktopViewport && portraitVideoItems[item.id] === true;
+                const mediaAspectRatio = mediaAspectRatios[item.id];
+                const isPortraitMedia = mediaAspectRatio !== undefined && mediaAspectRatio < 1;
+                const isDesktopPortraitMedia = Boolean(item.mediaUrl) && isDesktopViewport && isPortraitMedia;
+                const isMobilePortraitVideo = isVideoItem && !isDesktopViewport && (mediaAspectRatio === undefined || isPortraitMedia);
                 const customStatuses = item.statuses || [];
                 const statusLabels = availability.status === "out"
                   ? ["Sold out", ...customStatuses.filter((status) => status.toLowerCase() !== "available" && status.toLowerCase() !== "sold out")]
@@ -609,23 +612,20 @@ const MenuPage = () => {
                       availability.status === "out" ? "opacity-80" : ""
                     }`}
                   >
-                    <CardContent className={`p-0 ${isDesktopPortraitVideo ? "md:grid md:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.6fr)] md:items-stretch" : ""}`}>
+                    <CardContent className={`p-0 ${isDesktopPortraitMedia ? "md:grid md:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.6fr)] md:items-stretch" : ""}`}>
                       {item.mediaUrl && (
                         item.mediaType === "video" ? (
-                          <div className={isDesktopPortraitVideo ? "min-w-0" : "w-full"}>
+                          <div className={isDesktopPortraitMedia ? "min-w-0" : "w-full"}>
                             <MuxVideoPlayer
                               key={`${item.id}-${item.mediaAttachmentId}`}
                               attachmentId={item.mediaAttachmentId}
                               b2Url={item.mediaUrl}
                               controlsMode="minimal"
                               presentation="immersive"
-                              portraitAlignment={isDesktopPortraitVideo ? "start" : "center"}
+                              overlayOnlyOnMobilePortrait
+                              portraitAlignment={isDesktopPortraitMedia ? "start" : "center"}
                               onAspectRatioChange={(ratio) => {
-                                setPortraitVideoItems((current) => {
-                                  const isPortrait = ratio < 1;
-                                  if (current[item.id] === isPortrait) return current;
-                                  return { ...current, [item.id]: isPortrait };
-                                });
+                                setMediaAspectRatios((current) => current[item.id] === ratio ? current : { ...current, [item.id]: ratio });
                               }}
                               overlay={(
                                 <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-4 pb-4 pt-20 text-white sm:px-6 sm:pb-5">
@@ -690,19 +690,28 @@ const MenuPage = () => {
                             src={item.mediaUrl}
                             alt={`${item.name} dish`}
                             loading="lazy"
-                            className="max-h-96 w-full aspect-[4/3] object-cover sm:aspect-[16/9]"
+                            onLoad={(event) => {
+                              const image = event.currentTarget;
+                              if (!image.naturalWidth || !image.naturalHeight) return;
+                              const ratio = image.naturalWidth / image.naturalHeight;
+                              setMediaAspectRatios((current) => current[item.id] === ratio ? current : { ...current, [item.id]: ratio });
+                            }}
+                            style={mediaAspectRatio && (isDesktopPortraitMedia || !isPortraitMedia) ? { aspectRatio: mediaAspectRatio, maxHeight: "68svh" } : undefined}
+                            className={isDesktopPortraitMedia || mediaAspectRatio !== undefined && !isPortraitMedia
+                              ? "w-full bg-black/5 object-contain"
+                              : "max-h-96 w-full aspect-[4/3] object-cover sm:aspect-[16/9]"}
                           />
                         )
                       )}
-                      <div className={`flex min-w-0 flex-col md:flex-row ${isDesktopPortraitVideo ? "md:col-start-2" : ""}`}>
+                      <div className={`flex min-w-0 flex-col md:flex-row ${isDesktopPortraitMedia ? "md:col-start-2" : ""}`}>
                         {/* Item Image and Basic Info */}
                         <div className="min-w-0 flex-1 p-4 md:p-6">
                           <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                             <div className="flex min-w-0 items-start gap-3 md:items-center md:gap-4">
-                              {!isVideoItem && <div className="shrink-0 text-4xl md:text-5xl" aria-hidden="true">{item.image}</div>}
+                              {!isVideoItem && !isDesktopPortraitMedia && <div className="shrink-0 text-4xl md:text-5xl" aria-hidden="true">{item.image}</div>}
                               <div className="min-w-0">
                                 <div className="mb-1 flex flex-wrap items-start gap-2">
-                                  {(!isVideoItem || isDesktopPortraitVideo) && (
+                                  {(!isVideoItem || !isMobilePortraitVideo) && (
                                     <h3 className="break-words text-lg font-bold text-sheraton-navy md:text-xl">
                                       {item.name}
                                     </h3>
@@ -755,7 +764,7 @@ const MenuPage = () => {
                             </div>
 
                             {/* Price and Availability */}
-                            {(!isVideoItem || isDesktopPortraitVideo) && <div className="w-full text-left md:w-auto md:text-right">
+                            {(!isVideoItem || !isMobilePortraitVideo) && <div className="w-full text-left md:w-auto md:text-right">
                               <div className="mb-2 flex flex-wrap items-center gap-2">
                                 {discountPercent > 0 && (
                                   <span className="text-sm text-muted-foreground line-through" aria-label={`Original price ${formatPrice(item.originalPrice, item.currency)}`}>
@@ -849,7 +858,7 @@ const MenuPage = () => {
 
                           {/* Add to Cart */}
                           <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
-                            {(!isVideoItem || isDesktopPortraitVideo) && <div className="flex items-center gap-3">
+                            {(!isVideoItem || !isMobilePortraitVideo) && <div className="flex items-center gap-3">
                               {cartQuantity > 0 ? (
                                 <div className="flex items-center gap-2">
                                   <Button
