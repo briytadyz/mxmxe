@@ -28,9 +28,9 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   onAspectRatioChange,
 }) => {
   const [playbackId, setPlaybackId] = useState<string | null>(null);
-  const [aspectRatio, setAspectRatio] = useState(16 / 9);
-  const [viewportHeight, setViewportHeight] = useState(720);
-  const [viewportWidth, setViewportWidth] = useState(390);
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(() => typeof window === "undefined" ? 0 : window.innerHeight);
+  const [viewportWidth, setViewportWidth] = useState(() => typeof window === "undefined" ? 0 : window.innerWidth);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -102,22 +102,23 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
     };
   }, [attachmentId, filename]);
 
-  const isImmersivePortrait = presentation === "immersive" && aspectRatio < 1;
+  const isPortrait = aspectRatio !== null && aspectRatio < 1;
+  const isImmersivePortrait = presentation === "immersive" && isPortrait;
   const fillPortraitFrame = isImmersivePortrait && viewportWidth < 640;
   const frameStyle: React.CSSProperties = presentation === "immersive"
     ? fillPortraitFrame
       ? { width: "100%", height: "min(68svh, 560px)" }
       : {
-          aspectRatio,
+          aspectRatio: aspectRatio ?? undefined,
           width: isImmersivePortrait ? `min(100%, calc(68svh * ${aspectRatio}))` : "100%",
           maxHeight: "68svh",
-          maxWidth: isImmersivePortrait ? "100%" : `min(100%, calc(68svh * ${aspectRatio}))`,
+          maxWidth: isImmersivePortrait ? "100%" : aspectRatio !== null ? `min(100%, calc(68svh * ${aspectRatio}))` : "100%",
         }
     : {
-        aspectRatio,
-        width: aspectRatio < 1 ? `${Math.min(448, viewportHeight * 0.7 * aspectRatio)}px` : "100%",
+        aspectRatio: aspectRatio ?? undefined,
+        width: isPortrait && aspectRatio !== null ? `${Math.min(448, viewportHeight * 0.7 * aspectRatio)}px` : "100%",
         maxHeight: "70svh",
-        maxWidth: aspectRatio < 1 ? "100%" : `min(100%, calc(70svh * ${aspectRatio}))`,
+        maxWidth: isPortrait ? "100%" : aspectRatio !== null ? `min(100%, calc(70svh * ${aspectRatio}))` : "100%",
       };
   const muxPlayerStyle = {
     width: "100%",
@@ -130,8 +131,8 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
     ? `relative w-full overflow-hidden bg-black ${portraitAlignment === "center" ? "mx-auto" : ""}`
     : "relative mx-auto w-full overflow-hidden rounded-xl bg-black shadow-md";
   const showOverlay = overlayOnlyOnMobilePortrait
-    ? presentation === "immersive" && aspectRatio < 1 && viewportWidth < 768
-    : !(presentation === "immersive" && aspectRatio < 1 && viewportWidth >= 768);
+    ? presentation === "immersive" && isPortrait && viewportWidth < 768
+    : !(presentation === "immersive" && isPortrait && viewportWidth >= 768);
 
   const updateAspectRatio = (width: number, height: number) => {
     if (width <= 0 || height <= 0) return;
