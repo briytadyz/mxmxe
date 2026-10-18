@@ -20,6 +20,7 @@ const emptyForm = {
   mediaType: "image" as "image" | "video",
   mediaUrl: "",
   mediaAttachmentId: "",
+  mediaAspectRatio: "",
   price: "",
   originalPrice: "",
   category: "mains" as MenuCategory,
@@ -46,6 +47,24 @@ type PendingMenuProvider = {
   service_type: string;
   menu_access_role: "chef" | "food_beverage_manager";
 };
+
+const measureMediaAspectRatio = (file: File) => new Promise<number | null>((resolve) => {
+  const objectUrl = URL.createObjectURL(file);
+  const media = file.type.startsWith("video") ? document.createElement("video") : new Image();
+  const finish = (ratio: number | null) => {
+    URL.revokeObjectURL(objectUrl);
+    resolve(ratio);
+  };
+
+  if (media instanceof HTMLVideoElement) {
+    media.preload = "metadata";
+    media.onloadedmetadata = () => finish(media.videoWidth / media.videoHeight || null);
+  } else {
+    media.onload = () => finish(media.naturalWidth / media.naturalHeight || null);
+  }
+  media.onerror = () => finish(null);
+  media.src = objectUrl;
+});
 
 const MenuManagementPage = () => {
   const { tenant, loading: tenantLoading } = useHotelTenant();
@@ -119,13 +138,17 @@ const MenuManagementPage = () => {
 
   const handleMediaFile = async (file?: File) => {
     if (!file) return;
-    const uploaded = await uploadFile(file, "menu-items");
+    const [uploaded, mediaAspectRatio] = await Promise.all([
+      uploadFile(file, "menu-items"),
+      measureMediaAspectRatio(file),
+    ]);
     if (!uploaded) return;
     setForm((current) => ({
       ...current,
       mediaType: uploaded.fileType === "video" ? "video" : "image",
       mediaUrl: uploaded.publicUrl,
       mediaAttachmentId: uploaded.attachmentId,
+      mediaAspectRatio: mediaAspectRatio ? String(mediaAspectRatio) : "",
     }));
   };
 
@@ -144,6 +167,7 @@ const MenuManagementPage = () => {
       mediaType: item.mediaType || "image",
       mediaUrl: item.mediaUrl || "",
       mediaAttachmentId: item.mediaAttachmentId || "",
+      mediaAspectRatio: item.mediaAspectRatio ? String(item.mediaAspectRatio) : "",
       price: String(item.price),
       originalPrice: String(item.originalPrice),
       category: item.category,
@@ -187,6 +211,7 @@ const MenuManagementPage = () => {
       mediaType: form.mediaUrl ? form.mediaType : undefined,
       mediaUrl: form.mediaUrl || undefined,
       mediaAttachmentId: form.mediaAttachmentId || undefined,
+      mediaAspectRatio: Number(form.mediaAspectRatio) || undefined,
       price,
       originalPrice: Math.max(price, originalPrice),
       category: form.category,
@@ -231,20 +256,27 @@ const MenuManagementPage = () => {
       media_type: nextItem.mediaType || null,
       media_url: nextItem.mediaUrl || null,
       media_attachment_id: nextItem.mediaAttachmentId || null,
+      media_aspect_ratio: nextItem.mediaAspectRatio || null,
       managed_by: (await supabase.auth.getUser()).data.user?.id,
       organization_id: tenant?.organizationId,
     };
 
-    const databaseQuery = nextItem.databaseId
+    const saveMenuItem = (payload: Record<string, unknown>) => nextItem.databaseId
       ? supabase
           .from("menu_items")
-          .update(databasePayload)
+          .update(payload)
           .eq("id", nextItem.databaseId)
           .eq("organization_id", tenant?.organizationId)
           .select()
           .single()
-      : supabase.from("menu_items").insert(databasePayload).select().single();
-    const { data: savedDatabaseItem, error: databaseError } = await databaseQuery;
+      : supabase.from("menu_items").insert(payload).select().single();
+    let { data: savedDatabaseItem, error: databaseError } = await saveMenuItem(databasePayload);
+    if (databaseError?.code === "PGRST204" || databaseError?.code === "42703") {
+      const payloadWithoutRatio = Object.fromEntries(
+        Object.entries(databasePayload).filter(([key]) => key !== "media_aspect_ratio"),
+      );
+      ({ data: savedDatabaseItem, error: databaseError } = await saveMenuItem(payloadWithoutRatio));
+    }
 
     if (databaseError || !savedDatabaseItem) {
       console.error("Unable to save menu item to Supabase", databaseError);

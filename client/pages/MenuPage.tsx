@@ -18,12 +18,6 @@ import {
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../components/ui/tabs";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -63,6 +57,58 @@ import {
   Gift,
 } from "lucide-react";
 
+const MenuSpecialOffer = () => {
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const hour = currentTime.getHours();
+  const offer = hour >= 11 && hour < 15
+    ? {
+        title: "Lunch Special",
+        description: "Order now and skip the queue - you come first!",
+        emoji: "🍽️",
+        endsAt: new Date(currentTime.getTime() + (15 - hour) * 60 * 60 * 1000 - currentTime.getMinutes() * 60 * 1000),
+      }
+    : hour >= 17 && hour < 23
+      ? {
+          title: "Evening Delight",
+          description: "Live jazz band + special cocktail prices",
+          emoji: "🎷",
+          endsAt: new Date(currentTime.getTime() + (23 - hour) * 60 * 60 * 1000 - currentTime.getMinutes() * 60 * 1000),
+        }
+      : null;
+
+  if (!offer) return null;
+
+  const remainingTime = offer.endsAt.getTime() - currentTime.getTime();
+
+  return (
+    <Card className="mb-8 border-sheraton-gold bg-gradient-to-r from-sheraton-gold/10 to-sheraton-gold/5">
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="text-4xl">{offer.emoji}</div>
+            <div>
+              <h3 className="text-xl font-bold text-sheraton-navy">{offer.title}</h3>
+              <p className="text-muted-foreground">{offer.description}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm text-muted-foreground">Ends in:</div>
+            <div className="text-2xl font-bold text-sheraton-gold">
+              {Math.floor(remainingTime / (1000 * 60 * 60))}h {Math.floor((remainingTime % (1000 * 60 * 60)) / (1000 * 60))}m
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 const MenuPage = () => {
   const { tenant } = useHotelTenant();
   const navigate = useNavigate();
@@ -73,8 +119,6 @@ const MenuPage = () => {
   const [cart, setCart] = useState<{ [key: string]: number }>({});
   const [isDesktopViewport, setIsDesktopViewport] = useState(() => typeof window !== "undefined" && window.innerWidth >= 768);
   const [mediaAspectRatios, setMediaAspectRatios] = useState<Record<string, number>>({});
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [activeTab, setActiveTab] = useState("food");
   const [showCheckoutPage, setShowCheckoutPage] = useState(false);
   const [resumableOrder, setResumableOrder] = useState<ResumableMenuOrder | undefined>();
   const [durableCartId, setDurableCartId] = useState<string | null>(null);
@@ -84,11 +128,6 @@ const MenuPage = () => {
     const updateViewport = () => setIsDesktopViewport(window.innerWidth >= 768);
     window.addEventListener("resize", updateViewport);
     return () => window.removeEventListener("resize", updateViewport);
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -369,36 +408,6 @@ const MenuPage = () => {
   const formatPrice = (amount: number, currency = "USD") =>
     new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
 
-  const getCurrentOffer = () => {
-    const hour = currentTime.getHours();
-    if (hour >= 11 && hour < 15) {
-      return {
-        title: "Lunch Special",
-        description: "Order now and skip the queue - you come first!",
-        emoji: "🍽️",
-        countdown: new Date(
-          currentTime.getTime() +
-            (15 - hour) * 60 * 60 * 1000 -
-            currentTime.getMinutes() * 60 * 1000,
-        ),
-      };
-    } else if (hour >= 17 && hour < 23) {
-      return {
-        title: "Evening Delight",
-        description: "Live jazz band + special cocktail prices",
-        emoji: "🎷",
-        countdown: new Date(
-          currentTime.getTime() +
-            (23 - hour) * 60 * 60 * 1000 -
-            currentTime.getMinutes() * 60 * 1000,
-        ),
-      };
-    }
-    return null;
-  };
-
-  const currentOffer = getCurrentOffer();
-
   if (showCheckoutPage) {
     return (
       <CheckoutPage
@@ -441,44 +450,7 @@ const MenuPage = () => {
           </div>
         </div>
 
-        {/* Current Special Offer */}
-        {currentOffer && (
-          <Card className="mb-8 border-sheraton-gold bg-gradient-to-r from-sheraton-gold/10 to-sheraton-gold/5">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="text-4xl">{currentOffer.emoji}</div>
-                  <div>
-                    <h3 className="text-xl font-bold text-sheraton-navy">
-                      {currentOffer.title}
-                    </h3>
-                    <p className="text-muted-foreground">
-                      {currentOffer.description}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm text-muted-foreground">Ends in:</div>
-                  <div className="text-2xl font-bold text-sheraton-gold">
-                    {Math.floor(
-                      (currentOffer.countdown.getTime() -
-                        currentTime.getTime()) /
-                        (1000 * 60 * 60),
-                    )}
-                    h{" "}
-                    {Math.floor(
-                      ((currentOffer.countdown.getTime() -
-                        currentTime.getTime()) %
-                        (1000 * 60 * 60)) /
-                        (1000 * 60),
-                    )}
-                    m
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <MenuSpecialOffer />
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Filters and Categories */}
@@ -592,7 +564,7 @@ const MenuPage = () => {
                   ? Math.round((1 - item.price / item.originalPrice) * 100)
                   : 0;
                 const isVideoItem = item.mediaType === "video" && Boolean(item.mediaUrl);
-                const mediaAspectRatio = mediaAspectRatios[item.id];
+                const mediaAspectRatio = item.mediaAspectRatio ?? mediaAspectRatios[item.id];
                 const isPortraitMedia = mediaAspectRatio !== undefined && mediaAspectRatio < 1;
                 const isDesktopPortraitMedia = Boolean(item.mediaUrl) && isDesktopViewport && isPortraitMedia;
                 const isMobilePortraitVideo = isVideoItem && !isDesktopViewport && isPortraitMedia;
@@ -615,10 +587,14 @@ const MenuPage = () => {
                             <MuxVideoPlayer
                               key={`${item.id}-${item.mediaAttachmentId}`}
                               attachmentId={item.mediaAttachmentId}
+                              initialPlaybackId={item.mediaPlaybackId}
+                              initialAspectRatio={item.mediaAspectRatio}
+                              initialVideoStatus={item.mediaVideoStatus}
                               controlsMode="minimal"
                               presentation="immersive"
                               overlayOnlyOnMobilePortrait
                               onAspectRatioChange={(ratio) => {
+                                if (item.mediaAspectRatio === ratio) return;
                                 setMediaAspectRatios((current) => current[item.id] === ratio ? current : { ...current, [item.id]: ratio });
                               }}
                               overlay={(
@@ -683,7 +659,9 @@ const MenuPage = () => {
                           <img
                             src={item.mediaUrl}
                             alt={`${item.name} dish`}
+                            loading="lazy"
                             onLoad={(event) => {
+                              if (item.mediaAspectRatio) return;
                               const image = event.currentTarget;
                               if (!image.naturalWidth || !image.naturalHeight) return;
                               const ratio = image.naturalWidth / image.naturalHeight;

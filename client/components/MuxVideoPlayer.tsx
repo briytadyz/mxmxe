@@ -7,6 +7,9 @@ import { supabase } from "../lib/supabase";
 interface MuxVideoPlayerProps {
   attachmentId?: string;
   filename?: string;
+  initialPlaybackId?: string;
+  initialAspectRatio?: number;
+  initialVideoStatus?: string;
   controlsMode?: "default" | "minimal";
   presentation?: "default" | "immersive";
   overlay?: ReactNode;
@@ -17,14 +20,17 @@ interface MuxVideoPlayerProps {
 export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   attachmentId,
   filename,
+  initialPlaybackId,
+  initialAspectRatio,
+  initialVideoStatus,
   controlsMode = "default",
   presentation = "default",
   overlay,
   overlayOnlyOnMobilePortrait = false,
   onAspectRatioChange,
 }) => {
-  const [playbackId, setPlaybackId] = useState<string | null>(null);
-  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+  const [playbackId, setPlaybackId] = useState<string | null>(initialPlaybackId ?? null);
+  const [aspectRatio, setAspectRatio] = useState<number | null>(initialAspectRatio ?? null);
   const [viewportHeight, setViewportHeight] = useState(() => typeof window === "undefined" ? 0 : window.innerHeight);
   const [viewportWidth, setViewportWidth] = useState(() => typeof window === "undefined" ? 0 : window.innerWidth);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -45,6 +51,8 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   }, []);
 
   useEffect(() => {
+    if (initialPlaybackId && initialAspectRatio && initialVideoStatus === "ready") return;
+
     isMountedRef.current = true;
     let retries = 0;
 
@@ -99,7 +107,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
       isMountedRef.current = false;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [attachmentId, filename]);
+  }, [attachmentId, filename, initialAspectRatio, initialPlaybackId, initialVideoStatus]);
 
   const isPortrait = aspectRatio !== null && aspectRatio < 1;
   const isImmersivePortrait = presentation === "immersive" && isPortrait;

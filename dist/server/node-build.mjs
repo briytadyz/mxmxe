@@ -66,6 +66,16 @@ const readService$2 = async (path2) => {
   if (!response.ok) throw new Error("Hotel information could not be loaded");
   return response.json();
 };
+const updateService = async (path2, body) => {
+  const { supabaseUrl } = configuration$2();
+  const response = await fetch(`${supabaseUrl}/rest/v1/${path2}`, {
+    method: "PATCH",
+    headers: { ...serviceHeaders$2(true), Prefer: "return=minimal" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(1e4)
+  });
+  if (!response.ok) throw new Error("Menu media information could not be saved");
+};
 const callTenantRpc = async (name, args) => {
   const { supabaseUrl } = configuration$2();
   const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${name}`, {
@@ -278,10 +288,54 @@ const getPublicMenuItems = async (request, response) => {
   try {
     const tenant = await resolveRequestHotelTenant(request);
     const organizationId = encodeURIComponent(tenant.organizationId);
-    const select = "id,organization_id,name,short_description,full_description,currency,media_type,media_url,media_attachment_id,price,original_price,category,icon,preparation_time,availability,max_availability,dietary_tags,spice_level,origin,calories,chef_note,special_offer,status_labels,is_trending,is_published,created_at";
-    const items = await readService$2(`menu_items?organization_id=eq.${organizationId}&is_published=eq.true&select=${select}&order=created_at.asc`);
+    const select = "id,organization_id,name,short_description,full_description,currency,media_type,media_url,media_attachment_id,media_aspect_ratio,price,original_price,category,icon,preparation_time,availability,max_availability,dietary_tags,spice_level,origin,calories,chef_note,special_offer,status_labels,is_trending,is_published,created_at";
+    const legacySelect = select.replace(",media_aspect_ratio", "");
+    let hasMediaAspectRatioColumn = true;
+    let items;
+    try {
+      items = await readService$2(`menu_items?organization_id=eq.${organizationId}&is_published=eq.true&select=${select}&order=created_at.asc`);
+    } catch {
+      hasMediaAspectRatioColumn = false;
+      items = await readService$2(`menu_items?organization_id=eq.${organizationId}&is_published=eq.true&select=${legacySelect}&order=created_at.asc`);
+    }
+    const videoItems = items.filter((item) => item.media_type === "video" && item.media_attachment_id);
+    let mediaItems = items;
+    if (videoItems.length) {
+      const attachmentIds = [...new Set(videoItems.map((item) => String(item.media_attachment_id)))];
+      const attachmentQuery = new URLSearchParams({ id: `in.(${attachmentIds.join(",")})`, select: "id,filename" });
+      const attachments = await readService$2(`attachments?${attachmentQuery}`);
+      const filenames = [...new Set(attachments.map((attachment) => attachment.filename))];
+      const filenameFilter = filenames.map((filename) => `"${filename.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",");
+      const videoQuery = new URLSearchParams({ filename: `in.(${filenameFilter})`, select: "filename,playback_id,status" });
+      const videos = filenames.length ? await readService$2(`video_uploads?${videoQuery}`) : [];
+      const attachmentById = new Map(attachments.map((attachment) => [attachment.id, attachment]));
+      const videoByFilename = new Map(videos.map((video) => [video.filename, video]));
+      mediaItems = await Promise.all(items.map(async (item) => {
+        const attachment = attachmentById.get(String(item.media_attachment_id));
+        if (item.media_type !== "video" || !attachment) return item;
+        const video = videoByFilename.get(attachment.filename);
+        const playbackId = video?.status === "ready" ? video.playback_id : null;
+        const storedRatio = Number(item.media_aspect_ratio);
+        const aspectRatio = storedRatio > 0 ? storedRatio : playbackId ? await getMuxAspectRatio(playbackId) : null;
+        if (aspectRatio && !storedRatio && hasMediaAspectRatioColumn) {
+          try {
+            await updateService(
+              `menu_items?id=eq.${encodeURIComponent(String(item.id))}&organization_id=eq.${organizationId}`,
+              { media_aspect_ratio: aspectRatio }
+            );
+          } catch {
+          }
+        }
+        return {
+          ...item,
+          media_aspect_ratio: aspectRatio,
+          media_playback_id: playbackId,
+          media_video_status: video?.status || "pending"
+        };
+      }));
+    }
     setPrivateTenantResponse(response);
-    response.json({ tenant, items });
+    response.json({ tenant, items: mediaItems });
   } catch (error) {
     response.status(404).json({ error: error instanceof Error ? error.message : "Menu information could not be loaded" });
   }
@@ -306,7 +360,10 @@ const requestHotelMenuAvailability = async (request, response) => {
     response.status(400).json({ error: error instanceof Error ? error.message : "Availability request could not be saved" });
   }
 };
+const muxAspectRatios = /* @__PURE__ */ new Map();
 const getMuxAspectRatio = async (playbackId) => {
+  const cachedRatio = muxAspectRatios.get(playbackId);
+  if (cachedRatio) return cachedRatio;
   try {
     const manifestResponse = await fetch(`https://stream.mux.com/${encodeURIComponent(playbackId)}.m3u8`, {
       signal: AbortSignal.timeout(5e3)
@@ -315,7 +372,9 @@ const getMuxAspectRatio = async (playbackId) => {
     const manifest = await manifestResponse.text();
     const resolution = manifest.match(/RESOLUTION=(\d+)x(\d+)/);
     if (!resolution) return null;
-    return Number(resolution[1]) / Number(resolution[2]);
+    const aspectRatio = Number(resolution[1]) / Number(resolution[2]);
+    muxAspectRatios.set(playbackId, aspectRatio);
+    return aspectRatio;
   } catch {
     return null;
   }
@@ -330,9 +389,16 @@ const getPublicMenuVideo = async (request, response) => {
     const tenant = await resolveRequestHotelTenant(request);
     const organizationId = encodeURIComponent(tenant.organizationId);
     const encodedAttachmentId = encodeURIComponent(attachmentId);
-    const menuItems = await readService$2(
-      `menu_items?organization_id=eq.${organizationId}&media_attachment_id=eq.${encodedAttachmentId}&media_type=eq.video&is_published=eq.true&select=id&limit=1`
-    );
+    let menuItems;
+    try {
+      menuItems = await readService$2(
+        `menu_items?organization_id=eq.${organizationId}&media_attachment_id=eq.${encodedAttachmentId}&media_type=eq.video&is_published=eq.true&select=id,media_aspect_ratio&limit=1`
+      );
+    } catch {
+      menuItems = await readService$2(
+        `menu_items?organization_id=eq.${organizationId}&media_attachment_id=eq.${encodedAttachmentId}&media_type=eq.video&is_published=eq.true&select=id&limit=1`
+      );
+    }
     if (menuItems.length === 0) {
       response.status(404).json({ error: "Menu video was not found" });
       return;
@@ -350,7 +416,20 @@ const getPublicMenuVideo = async (request, response) => {
     );
     const video = videos[0];
     const playbackId = video?.status === "ready" ? video.playback_id : null;
-    const aspectRatio = playbackId ? await getMuxAspectRatio(playbackId) : null;
+    const menuItem = menuItems[0];
+    let aspectRatio = menuItem.media_aspect_ratio;
+    if (playbackId && !(aspectRatio && Number.isFinite(aspectRatio) && aspectRatio > 0)) {
+      aspectRatio = await getMuxAspectRatio(playbackId);
+      if (aspectRatio) {
+        try {
+          await updateService(
+            `menu_items?id=eq.${encodeURIComponent(menuItem.id)}&organization_id=eq.${organizationId}`,
+            { media_aspect_ratio: aspectRatio }
+          );
+        } catch {
+        }
+      }
+    }
     setPrivateTenantResponse(response);
     response.json({
       status: video?.status || "pending",

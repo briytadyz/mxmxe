@@ -11,6 +11,9 @@ export interface MenuItem {
   mediaType?: "image" | "video";
   mediaUrl?: string;
   mediaAttachmentId?: string;
+  mediaAspectRatio?: number;
+  mediaPlaybackId?: string;
+  mediaVideoStatus?: string;
   price: number;
   originalPrice: number;
   category: MenuCategory;
@@ -161,6 +164,9 @@ export const menuItemFromDatabaseRow = (row: any): MenuItem => ({
   mediaType: row.media_type || undefined,
   mediaUrl: row.media_url || undefined,
   mediaAttachmentId: row.media_attachment_id || undefined,
+  mediaAspectRatio: Number(row.media_aspect_ratio) > 0 ? Number(row.media_aspect_ratio) : undefined,
+  mediaPlaybackId: row.media_playback_id || undefined,
+  mediaVideoStatus: row.media_video_status || undefined,
   price: Number(row.price),
   originalPrice: Number(row.original_price || row.price),
   category: row.category,
