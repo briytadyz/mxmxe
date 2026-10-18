@@ -148,12 +148,11 @@ const AttachmentList: React.FC<AttachmentListProps> = ({ attachments, compact = 
           <div className="space-y-2">
             {videos.map((attachment) => {
               const fileName = getFileNameFromAttachment(attachment);
-              const fileUrl = getFileUrlFromAttachment(attachment);
               const videoFilename = attachment.filename || '';
               return (
                 <div key={videoFilename} className="w-full">
                   <p className="text-xs font-medium text-gray-600 mb-2">{fileName}</p>
-                  {videoFilename && <MuxVideoPlayer filename={videoFilename} b2Url={fileUrl} />}
+                  {videoFilename && <MuxVideoPlayer filename={videoFilename} />}
                 </div>
               );
             })}
@@ -237,12 +236,11 @@ const AttachmentList: React.FC<AttachmentListProps> = ({ attachments, compact = 
           <div className="space-y-2">
             {videos.map((attachment) => {
               const fileName = getFileNameFromAttachment(attachment);
-              const fileUrl = getFileUrlFromAttachment(attachment);
               const videoFilename = attachment.filename || '';
               return (
                 <div key={videoFilename} className="space-y-2">
                   <p className="text-xs font-medium text-gray-600">{fileName}</p>
-                  {videoFilename && <MuxVideoPlayer filename={videoFilename} b2Url={fileUrl} />}
+                  {videoFilename && <MuxVideoPlayer filename={videoFilename} />}
                 </div>
               );
             })}

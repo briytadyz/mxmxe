@@ -5,7 +5,6 @@ import MuxPlayer from "@mux/mux-player-react";
 import { supabase } from "../lib/supabase";
 
 interface MuxVideoPlayerProps {
-  b2Url: string;
   attachmentId?: string;
   filename?: string;
   controlsMode?: "default" | "minimal";
@@ -16,7 +15,6 @@ interface MuxVideoPlayerProps {
 }
 
 export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
-  b2Url,
   attachmentId,
   filename,
   controlsMode = "default",
@@ -34,7 +32,6 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const isMountedRef = useRef(true);
   const muxPlayerRef = useRef<MuxPlayerElement | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -140,7 +137,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   };
 
   const togglePlayback = () => {
-    const media = muxPlayerRef.current || videoRef.current;
+    const media = muxPlayerRef.current;
     if (!media) return;
     if (media.paused) {
       void media.play().catch(() => setIsPlaying(false));
@@ -150,7 +147,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   };
 
   const toggleMuted = () => {
-    const media = muxPlayerRef.current || videoRef.current;
+    const media = muxPlayerRef.current;
     if (!media) return;
     media.muted = !media.muted;
     setIsMuted(media.muted);
@@ -197,7 +194,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
 
   return (
     <div ref={frameRef} className={frameClass} style={frameStyle}>
-      {playbackId ? (
+      {playbackId && (
         <MuxPlayer
           ref={muxPlayerRef}
           playbackId={playbackId}
@@ -212,23 +209,6 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
           onEnded={() => setIsPlaying(false)}
           onVolumeChange={(event) => setIsMuted((event.currentTarget as MuxPlayerElement).muted)}
           style={muxPlayerStyle}
-        />
-      ) : (
-        <video
-          ref={videoRef}
-          src={b2Url}
-          controls={controlsMode === "default"}
-          playsInline
-          preload="metadata"
-          onLoadedMetadata={(event) => {
-            updateAspectRatio(event.currentTarget.videoWidth, event.currentTarget.videoHeight);
-            setIsMuted(event.currentTarget.muted);
-          }}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
-          onEnded={() => setIsPlaying(false)}
-          onVolumeChange={(event) => setIsMuted((event.currentTarget as HTMLVideoElement).muted)}
-          className={`h-full w-full ${fillPortraitFrame ? "object-cover" : "object-contain"}`}
         />
       )}
       {minimalControls}
