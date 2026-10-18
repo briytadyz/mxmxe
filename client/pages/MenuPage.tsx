@@ -559,34 +559,30 @@ const MenuPage = () => {
           {/* Menu Items */}
           <div className="lg:col-span-3">
             {filteredItems.length === 0 ? (
-              <Card className="border-dashed bg-card/80">
-                <CardContent className="flex min-h-56 flex-col items-center justify-center px-6 py-10 text-center">
-                  {menuItemsReady ? (
-                    <>
-                      <Utensils className="mb-4 h-8 w-8 text-sheraton-gold" aria-hidden="true" />
-                      <h2 className="text-lg font-semibold">
-                        {menuItems.length === 0 ? "Menu coming soon" : "No dishes match your search"}
-                      </h2>
-                      <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-                        {menuItems.length === 0
-                          ? "Our team is preparing the menu. Please check back shortly."
-                          : "Try another search or clear your filters to see more dishes."}
-                      </p>
-                      {menuItems.length > 0 && (
-                        <Button
-                          variant="outline"
-                          className="mt-4"
-                          onClick={() => { setSearchTerm(""); setSelectedCategory("all"); }}
-                        >
-                          Clear filters
-                        </Button>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground" role="status">Loading menu…</p>
-                  )}
-                </CardContent>
-              </Card>
+              menuItemsReady ? (
+                <Card className="border-dashed bg-card/80">
+                  <CardContent className="flex min-h-56 flex-col items-center justify-center px-6 py-10 text-center">
+                    <Utensils className="mb-4 h-8 w-8 text-sheraton-gold" aria-hidden="true" />
+                    <h2 className="text-lg font-semibold">
+                      {menuItems.length === 0 ? "Menu coming soon" : "No dishes match your search"}
+                    </h2>
+                    <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                      {menuItems.length === 0
+                        ? "Our team is preparing the menu. Please check back shortly."
+                        : "Try another search or clear your filters to see more dishes."}
+                    </p>
+                    {menuItems.length > 0 && (
+                      <Button
+                        variant="outline"
+                        className="mt-4"
+                        onClick={() => { setSearchTerm(""); setSelectedCategory("all"); }}
+                      >
+                        Clear filters
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : null
             ) : (
               <div className="grid grid-cols-1 gap-6">
                 {filteredItems.map((item) => {
