@@ -56,9 +56,13 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
         if (attachmentId) {
           const response = await window.fetch(`/api/hotel-menu-video/${encodeURIComponent(attachmentId)}`, { cache: "no-store" });
           if (!response.ok) return;
-          const video = await response.json() as { playbackId: string | null; status: string };
+          const video = await response.json() as { playbackId: string | null; status: string; aspectRatio: number | null };
           nextPlaybackId = video.playbackId;
           status = video.status;
+          if (video.aspectRatio && Number.isFinite(video.aspectRatio) && video.aspectRatio > 0) {
+            setAspectRatio(video.aspectRatio);
+            onAspectRatioChange?.(video.aspectRatio);
+          }
         } else if (filename) {
           const { data: video } = await supabase
             .from("video_uploads")

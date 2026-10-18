@@ -382,6 +382,23 @@ export const requestHotelMenuAvailability: RequestHandler = async (request, resp
   }
 };
 
+const getMuxAspectRatio = async (playbackId: string): Promise<number | null> => {
+  try {
+    const manifestResponse = await fetch(`https://stream.mux.com/${encodeURIComponent(playbackId)}.m3u8`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!manifestResponse.ok) return null;
+
+    const manifest = await manifestResponse.text();
+    const resolution = manifest.match(/RESOLUTION=(\d+)x(\d+)/);
+    if (!resolution) return null;
+
+    return Number(resolution[1]) / Number(resolution[2]);
+  } catch {
+    return null;
+  }
+};
+
 export const getPublicMenuVideo: RequestHandler = async (request, response) => {
   try {
     const { attachmentId } = request.params;
@@ -414,10 +431,13 @@ export const getPublicMenuVideo: RequestHandler = async (request, response) => {
       `video_uploads?filename=eq.${filename}&select=playback_id,status&limit=1`,
     );
     const video = videos[0];
+    const playbackId = video?.status === "ready" ? video.playback_id : null;
+    const aspectRatio = playbackId ? await getMuxAspectRatio(playbackId) : null;
     setPrivateTenantResponse(response);
     response.json({
       status: video?.status || "pending",
-      playbackId: video?.status === "ready" ? video.playback_id : null,
+      playbackId,
+      aspectRatio,
     });
   } catch (error) {
     response.status(404).json({ error: error instanceof Error ? error.message : "Menu video could not be loaded" });
