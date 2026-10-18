@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Maximize, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import type MuxPlayerElement from "@mux/mux-player";
-import MuxPlayer from "@mux/mux-player-react";
 import { supabase } from "../lib/supabase";
+
+const MuxPlayer = lazy(() => import("@mux/mux-player-react"));
 
 interface MuxVideoPlayerProps {
   attachmentId?: string;
@@ -60,7 +61,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
         setHasEnteredLoadRange(true);
         observer.disconnect();
       }
-    }, { rootMargin: "500px 0px" });
+    }, { rootMargin: "1000px 0px" });
 
     observer.observe(frame);
     return () => observer.disconnect();
@@ -223,21 +224,23 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   return (
     <div ref={frameRef} className={frameClass} style={frameStyle}>
       {playbackId && hasEnteredLoadRange && (
-        <MuxPlayer
-          ref={muxPlayerRef}
-          playbackId={playbackId}
-          streamType="on-demand"
-          onLoadedMetadata={(event) => {
-            const video = event.currentTarget as typeof event.currentTarget & { videoWidth: number; videoHeight: number; muted: boolean };
-            updateAspectRatio(video.videoWidth, video.videoHeight);
-            setIsMuted(video.muted);
-          }}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
-          onEnded={() => setIsPlaying(false)}
-          onVolumeChange={(event) => setIsMuted((event.currentTarget as MuxPlayerElement).muted)}
-          style={muxPlayerStyle}
-        />
+        <Suspense fallback={null}>
+          <MuxPlayer
+            ref={muxPlayerRef}
+            playbackId={playbackId}
+            streamType="on-demand"
+            onLoadedMetadata={(event) => {
+              const video = event.currentTarget as typeof event.currentTarget & { videoWidth: number; videoHeight: number; muted: boolean };
+              updateAspectRatio(video.videoWidth, video.videoHeight);
+              setIsMuted(video.muted);
+            }}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => setIsPlaying(false)}
+            onVolumeChange={(event) => setIsMuted((event.currentTarget as MuxPlayerElement).muted)}
+            style={muxPlayerStyle}
+          />
+        </Suspense>
       )}
       {minimalControls}
       {showOverlay && overlay}
