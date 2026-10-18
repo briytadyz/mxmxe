@@ -10,7 +10,6 @@ interface MuxVideoPlayerProps {
   filename?: string;
   controlsMode?: "default" | "minimal";
   presentation?: "default" | "immersive";
-  portraitAlignment?: "center" | "start";
   overlay?: ReactNode;
   overlayOnlyOnMobilePortrait?: boolean;
   onAspectRatioChange?: (aspectRatio: number) => void;
@@ -22,7 +21,6 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   filename,
   controlsMode = "default",
   presentation = "default",
-  portraitAlignment = "center",
   overlay,
   overlayOnlyOnMobilePortrait = false,
   onAspectRatioChange,
@@ -128,7 +126,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
     "--controls": controlsMode === "minimal" ? "none" : undefined,
   } as React.CSSProperties & { [key: `--${string}`]: string | undefined };
   const frameClass = presentation === "immersive"
-    ? `relative w-full overflow-hidden bg-black ${portraitAlignment === "center" ? "mx-auto" : ""}`
+    ? "relative w-full overflow-hidden bg-black"
     : "relative mx-auto w-full overflow-hidden rounded-xl bg-black shadow-md";
   const showOverlay = overlayOnlyOnMobilePortrait
     ? presentation === "immersive" && isPortrait && viewportWidth < 768
@@ -198,7 +196,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   );
 
   return (
-    <div ref={frameRef} className={`${frameClass} ${presentation === "immersive" ? "mx-auto" : ""}`} style={frameStyle}>
+    <div ref={frameRef} className={frameClass} style={frameStyle}>
       {playbackId ? (
         <MuxPlayer
           ref={muxPlayerRef}

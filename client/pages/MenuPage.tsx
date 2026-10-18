@@ -623,7 +623,6 @@ const MenuPage = () => {
                               controlsMode="minimal"
                               presentation="immersive"
                               overlayOnlyOnMobilePortrait
-                              portraitAlignment={isDesktopPortraitMedia ? "start" : "center"}
                               onAspectRatioChange={(ratio) => {
                                 setMediaAspectRatios((current) => current[item.id] === ratio ? current : { ...current, [item.id]: ratio });
                               }}
