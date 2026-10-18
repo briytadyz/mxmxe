@@ -600,7 +600,6 @@ const MenuPage = () => {
                 const isPortraitMedia = mediaAspectRatio !== undefined && mediaAspectRatio < 1;
                 const isDesktopPortraitMedia = Boolean(item.mediaUrl) && isDesktopViewport && isPortraitMedia;
                 const isMobilePortraitVideo = isVideoItem && !isDesktopViewport && isPortraitMedia;
-                const isMediaLayoutReady = !item.mediaUrl || mediaAspectRatio !== undefined;
                 const customStatuses = item.statuses || [];
                 const statusLabels = availability.status === "out"
                   ? ["Sold out", ...customStatuses.filter((status) => status.toLowerCase() !== "available" && status.toLowerCase() !== "sold out")]
@@ -611,7 +610,7 @@ const MenuPage = () => {
                     key={item.id}
                     className={`overflow-hidden hover:shadow-lg transition-shadow ${
                       availability.status === "out" ? "opacity-80" : ""
-                    } ${isMediaLayoutReady ? "" : "hidden"}`}
+                    }`}
                   >
                     <CardContent className={`p-0 ${isDesktopPortraitMedia ? "md:grid md:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.6fr)] md:items-stretch" : ""}`}>
                       {item.mediaUrl && (
@@ -697,8 +696,8 @@ const MenuPage = () => {
                               setMediaAspectRatios((current) => current[item.id] === ratio ? current : { ...current, [item.id]: ratio });
                             }}
                             style={mediaAspectRatio && (isDesktopPortraitMedia || !isPortraitMedia) ? { aspectRatio: mediaAspectRatio, maxHeight: "68svh" } : undefined}
-                            className={isDesktopPortraitMedia || mediaAspectRatio !== undefined && !isPortraitMedia
-                              ? "w-full bg-black/5 object-contain"
+                            className={mediaAspectRatio === undefined || isDesktopPortraitMedia || !isPortraitMedia
+                              ? "max-h-[68svh] w-full bg-black/5 object-contain"
                               : "max-h-96 w-full aspect-[4/3] object-cover sm:aspect-[16/9]"}
                           />
                         )
