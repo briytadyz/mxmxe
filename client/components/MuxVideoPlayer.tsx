@@ -35,6 +35,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   const [viewportWidth, setViewportWidth] = useState(() => typeof window === "undefined" ? 0 : window.innerWidth);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [hasEnteredLoadRange, setHasEnteredLoadRange] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const isMountedRef = useRef(true);
   const muxPlayerRef = useRef<MuxPlayerElement | null>(null);
@@ -48,6 +49,21 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
     updateViewport();
     window.addEventListener("resize", updateViewport);
     return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setHasEnteredLoadRange(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "500px 0px" });
+
+    observer.observe(frame);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -206,7 +222,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
 
   return (
     <div ref={frameRef} className={frameClass} style={frameStyle}>
-      {playbackId && (
+      {playbackId && hasEnteredLoadRange && (
         <MuxPlayer
           ref={muxPlayerRef}
           playbackId={playbackId}
