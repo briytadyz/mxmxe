@@ -68,6 +68,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   }, []);
 
   useEffect(() => {
+    if (!hasEnteredLoadRange) return;
     if (initialPlaybackId && initialAspectRatio && initialVideoStatus === "ready") return;
 
     isMountedRef.current = true;
@@ -124,7 +125,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
       isMountedRef.current = false;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [attachmentId, filename, initialAspectRatio, initialPlaybackId, initialVideoStatus]);
+  }, [attachmentId, filename, hasEnteredLoadRange, initialAspectRatio, initialPlaybackId, initialVideoStatus]);
 
   const isPortrait = aspectRatio !== null && aspectRatio < 1;
   const isImmersivePortrait = presentation === "immersive" && isPortrait;

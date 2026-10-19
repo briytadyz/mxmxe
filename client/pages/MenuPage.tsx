@@ -674,7 +674,6 @@ const MenuPage = () => {
                           />
                         )
                       )}
-                      {(!isVideoItem || mediaAspectRatio !== undefined) && (
                       <div className={`flex min-w-0 flex-col md:flex-row ${isDesktopPortraitMedia ? "md:col-start-2" : ""}`}>
                         {/* Item Image and Basic Info */}
                         <div className="min-w-0 flex-1 p-4 md:p-6">
@@ -883,7 +882,6 @@ const MenuPage = () => {
                           </div>
                         </div>
                       </div>
-                      )}
                     </CardContent>
                   </Card>
                 );

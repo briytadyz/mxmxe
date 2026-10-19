@@ -371,62 +371,15 @@ export const getPublicMenuItems: RequestHandler = async (request, response) => {
     const organizationId = encodeURIComponent(tenant.organizationId);
     const select = "id,organization_id,name,short_description,full_description,currency,media_type,media_url,media_attachment_id,media_aspect_ratio,price,original_price,category,icon,preparation_time,availability,max_availability,dietary_tags,spice_level,origin,calories,chef_note,special_offer,status_labels,is_trending,is_published,created_at";
     const legacySelect = select.replace(",media_aspect_ratio", "");
-    let hasMediaAspectRatioColumn = true;
     let items: MenuItemRow[];
     try {
       items = await readService<MenuItemRow[]>(`menu_items?organization_id=eq.${organizationId}&is_published=eq.true&select=${select}&order=created_at.asc`);
     } catch {
-      hasMediaAspectRatioColumn = false;
       items = await readService<MenuItemRow[]>(`menu_items?organization_id=eq.${organizationId}&is_published=eq.true&select=${legacySelect}&order=created_at.asc`);
     }
 
-    const videoItems = items.filter((item) => item.media_type === "video" && item.media_attachment_id);
-    let mediaItems = items;
-    if (videoItems.length) {
-      const attachmentIds = [...new Set(videoItems.map((item) => String(item.media_attachment_id)))];
-      const attachmentQuery = new URLSearchParams({ id: `in.(${attachmentIds.join(",")})`, select: "id,filename" });
-      const attachments = await readService<Array<{ id: string; filename: string }>>(`attachments?${attachmentQuery}`);
-      const filenames = [...new Set(attachments.map((attachment) => attachment.filename))];
-      const filenameFilter = filenames.map((filename) => `"${filename.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`).join(",");
-      const videoQuery = new URLSearchParams({ filename: `in.(${filenameFilter})`, select: "filename,playback_id,status" });
-      const videos = filenames.length
-        ? await readService<Array<{ filename: string; playback_id: string | null; status: string }>>(`video_uploads?${videoQuery}`)
-        : [];
-      const attachmentById = new Map(attachments.map((attachment) => [attachment.id, attachment]));
-      const videoByFilename = new Map(videos.map((video) => [video.filename, video]));
-
-      mediaItems = await Promise.all(items.map(async (item) => {
-        const attachment = attachmentById.get(String(item.media_attachment_id));
-        if (item.media_type !== "video" || !attachment) return item;
-        const video = videoByFilename.get(attachment.filename);
-        const playbackId = video?.status === "ready" ? video.playback_id : null;
-        const storedRatio = Number(item.media_aspect_ratio);
-        const aspectRatio = storedRatio > 0
-          ? storedRatio
-          : playbackId ? await getMuxAspectRatio(playbackId) : null;
-
-        if (aspectRatio && !storedRatio && hasMediaAspectRatioColumn) {
-          try {
-            await updateService(
-              `menu_items?id=eq.${encodeURIComponent(String(item.id))}&organization_id=eq.${organizationId}`,
-              { media_aspect_ratio: aspectRatio },
-            );
-          } catch {
-            // The menu media migration may not have been applied yet.
-          }
-        }
-
-        return {
-          ...item,
-          media_aspect_ratio: aspectRatio,
-          media_playback_id: playbackId,
-          media_video_status: video?.status || "pending",
-        };
-      }));
-    }
-
     setPrivateTenantResponse(response);
-    response.json({ tenant, items: mediaItems });
+    response.json({ tenant, items });
   } catch (error) {
     response.status(404).json({ error: error instanceof Error ? error.message : "Menu information could not be loaded" });
   }
