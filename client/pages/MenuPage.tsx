@@ -424,7 +424,7 @@ const MenuPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sheraton-cream to-background">
-      <div className="container py-8 pb-24 md:pb-8">
+      <div className="container mx-auto px-4 py-8 pb-24 md:px-8 md:pb-8">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
