@@ -154,9 +154,10 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
     "--media-object-position": "50% 35%",
     "--controls": controlsMode === "minimal" ? "none" : undefined,
   } as React.CSSProperties & { [key: `--${string}`]: string | undefined };
-  const frameClass = presentation === "immersive"
+  const isDesktopMinimalControls = controlsMode === "minimal" && viewportWidth >= 768;
+  const frameClass = `${presentation === "immersive"
     ? "relative w-full overflow-hidden bg-black"
-    : "relative mx-auto w-full overflow-hidden rounded-xl bg-black shadow-md";
+    : "relative mx-auto w-full overflow-hidden rounded-xl bg-black shadow-md"} ${isDesktopMinimalControls ? "group" : ""}`;
   const showOverlay = overlayOnlyOnMobilePortrait
     ? presentation === "immersive" && isPortrait && viewportWidth < 768
     : !(presentation === "immersive" && isPortrait && viewportWidth >= 768);
@@ -194,16 +195,18 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   };
 
   const minimalControls = controlsMode === "minimal" && (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-3">
+    <div className={`pointer-events-none absolute z-20 ${isDesktopMinimalControls ? "inset-0" : "inset-x-0 top-0 flex items-start justify-between p-3"}`}>
       <button
         type="button"
         aria-label={isPlaying ? "Pause video" : "Play video"}
         onClick={togglePlayback}
-        className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white shadow-sm backdrop-blur-sm transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        className={`pointer-events-auto flex items-center justify-center rounded-full bg-black/55 text-white shadow-sm backdrop-blur-sm transition duration-200 hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isDesktopMinimalControls ? `absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 ${isPlaying ? "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100" : "opacity-100"}` : "h-10 w-10"}`}
       >
-        {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="ml-0.5 h-5 w-5" />}
+        {isPlaying
+          ? <Pause className={isDesktopMinimalControls ? "h-7 w-7" : "h-5 w-5"} />
+          : <Play className={`ml-0.5 ${isDesktopMinimalControls ? "h-7 w-7" : "h-5 w-5"}`} />}
       </button>
-      <div className="flex gap-2">
+      <div className={`flex gap-2 ${isDesktopMinimalControls ? "absolute inset-x-0 top-0 justify-between p-3" : ""}`}>
         <button
           type="button"
           aria-label={isMuted ? "Unmute video" : "Mute video"}
