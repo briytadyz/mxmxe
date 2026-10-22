@@ -37,6 +37,8 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
   const [hasEnteredLoadRange, setHasEnteredLoadRange] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const isMountedRef = useRef(true);
@@ -196,6 +198,13 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
     setIsMuted(media.muted);
   };
 
+  const seekTo = (time: number) => {
+    const media = muxPlayerRef.current;
+    if (!media || !Number.isFinite(media.duration)) return;
+    media.currentTime = time;
+    setCurrentTime(time);
+  };
+
   const toggleFullscreen = () => {
     if (document.fullscreenElement) {
       void document.exitFullscreen();
@@ -269,15 +278,24 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
             playbackId={playbackId}
             streamType="on-demand"
             onLoadedMetadata={(event) => {
-              const video = event.currentTarget as typeof event.currentTarget & { videoWidth: number; videoHeight: number; muted: boolean; volume: number };
+              const video = event.currentTarget as typeof event.currentTarget & { videoWidth: number; videoHeight: number; muted: boolean; volume: number; duration: number };
               video.volume = volume;
               updateAspectRatio(video.videoWidth, video.videoHeight);
               setIsMuted(video.muted);
               setVolume(video.volume);
+              if (Number.isFinite(video.duration)) setDuration(video.duration);
             }}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
-            onEnded={() => setIsPlaying(false)}
+            onEnded={() => {
+              setIsPlaying(false);
+              setCurrentTime(duration);
+            }}
+            onDurationChange={(event) => {
+              const media = event.currentTarget as MuxPlayerElement;
+              if (Number.isFinite(media.duration)) setDuration(media.duration);
+            }}
+            onTimeUpdate={(event) => setCurrentTime((event.currentTarget as MuxPlayerElement).currentTime)}
             onVolumeChange={(event) => {
               const media = event.currentTarget as MuxPlayerElement;
               setIsMuted(media.muted);
@@ -286,6 +304,20 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
             style={muxPlayerStyle}
           />
         </Suspense>
+      )}
+      {isDesktopMinimalControls && duration > 0 && (
+        <input
+          type="range"
+          min="0"
+          max={duration}
+          step="0.1"
+          value={Math.min(currentTime, duration)}
+          aria-label="Seek video"
+          aria-valuetext={`${Math.floor(currentTime)} seconds of ${Math.floor(duration)} seconds`}
+          onChange={(event) => seekTo(Number(event.currentTarget.value))}
+          style={{ background: `linear-gradient(to right, rgba(255,255,255,0.95) ${(currentTime / duration) * 100}%, rgba(255,255,255,0.35) ${(currentTime / duration) * 100}%)` }}
+          className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 h-1 w-full cursor-pointer appearance-none transition-[height] hover:h-1.5 focus-visible:h-1.5 focus-visible:outline-none [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:w-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white"
+        />
       )}
       {minimalControls}
       {showOverlay && overlay}
