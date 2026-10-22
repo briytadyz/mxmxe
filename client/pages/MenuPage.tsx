@@ -598,19 +598,19 @@ const MenuPage = () => {
                                 setMediaAspectRatios((current) => current[item.id] === ratio ? current : { ...current, [item.id]: ratio });
                               }}
                               overlay={(
-                                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-4 pb-4 pt-20 text-white sm:px-6 sm:pb-5">
+                                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/95 via-black/70 to-transparent px-4 pb-4 pt-20 text-white sm:px-6 sm:pb-5">
                                   <div className="pointer-events-auto flex items-end justify-between gap-3">
                                     <div className="min-w-0 flex-1">
                                       <h3 className="truncate text-lg font-semibold drop-shadow-sm sm:text-xl">{item.name}</h3>
                                       {item.special_offer && (
-                                        <p className="mt-0.5 truncate text-xs font-medium text-white/85 sm:text-sm">{item.special_offer}</p>
+                                        <p className="mt-0.5 truncate text-sm font-medium text-white/90">{item.special_offer}</p>
                                       )}
                                       <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                        <span className="text-lg font-bold sm:text-xl">{formatPrice(item.price, item.currency)}</span>
+                                        <span className="text-xl font-bold">{formatPrice(item.price, item.currency)}</span>
                                         {discountPercent > 0 && (
                                           <>
-                                            <span className="text-xs text-white/70 line-through">{formatPrice(item.originalPrice, item.currency)}</span>
-                                            <span className="text-xs font-semibold text-amber-200">{discountPercent}% off</span>
+                                            <span className="text-sm text-white/80 line-through">{formatPrice(item.originalPrice, item.currency)}</span>
+                                            <span className="text-sm font-semibold text-amber-200">{discountPercent}% off</span>
                                           </>
                                         )}
                                       </div>
