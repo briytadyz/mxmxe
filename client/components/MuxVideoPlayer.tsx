@@ -5,6 +5,16 @@ import { supabase } from "../lib/supabase";
 
 const MuxPlayer = lazy(() => import("@mux/mux-player-react"));
 
+const formatVideoTime = (time: number) => {
+  const totalSeconds = Math.floor(Math.max(0, Number.isFinite(time) ? time : 0));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}`
+    : `${minutes}:${seconds}`;
+};
+
 interface MuxVideoPlayerProps {
   attachmentId?: string;
   filename?: string;
@@ -306,18 +316,28 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
         </Suspense>
       )}
       {isDesktopMinimalControls && duration > 0 && (
-        <input
-          type="range"
-          min="0"
-          max={duration}
-          step="0.1"
-          value={Math.min(currentTime, duration)}
-          aria-label="Seek video"
-          aria-valuetext={`${Math.floor(currentTime)} seconds of ${Math.floor(duration)} seconds`}
-          onChange={(event) => seekTo(Number(event.currentTarget.value))}
-          style={{ background: `linear-gradient(to right, rgba(255,255,255,0.95) ${(currentTime / duration) * 100}%, rgba(255,255,255,0.35) ${(currentTime / duration) * 100}%)` }}
-          className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 h-1 w-full cursor-pointer appearance-none transition-[height] hover:h-1.5 focus-visible:h-1.5 focus-visible:outline-none [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:w-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white"
-        />
+        <>
+          <div className="pointer-events-none absolute bottom-3 left-2 z-30 rounded bg-black/55 px-1.5 py-0.5 text-[10px] tabular-nums text-white/90 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+            {formatVideoTime(currentTime)} / {formatVideoTime(duration)}
+          </div>
+          <input
+            type="range"
+            min="0"
+            max={duration}
+            step="0.1"
+            value={Math.min(currentTime, duration)}
+            aria-label="Seek video"
+            aria-valuetext={`${formatVideoTime(currentTime)} of ${formatVideoTime(duration)}`}
+            onChange={(event) => seekTo(Number(event.currentTarget.value))}
+            style={{
+              backgroundImage: "linear-gradient(#fff, #fff), linear-gradient(rgba(255,255,255,0.35), rgba(255,255,255,0.35)), linear-gradient(rgba(0,0,0,0.9), rgba(0,0,0,0.9))",
+              backgroundSize: `${(currentTime / duration) * 100}% 2px, 100% 2px, 100% 4px`,
+              backgroundPosition: "left center, center, center",
+              backgroundRepeat: "no-repeat",
+            }}
+            className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 h-3 w-full cursor-pointer appearance-none transition-[background-size] duration-200 focus-visible:outline-none [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:w-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white"
+          />
+        </>
       )}
       {minimalControls}
       {showOverlay && overlay}
