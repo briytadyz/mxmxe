@@ -36,6 +36,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   const [viewportWidth, setViewportWidth] = useState(() => typeof window === "undefined" ? 0 : window.innerWidth);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
   const [hasEnteredLoadRange, setHasEnteredLoadRange] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const isMountedRef = useRef(true);
@@ -186,6 +187,15 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
     setIsMuted(media.muted);
   };
 
+  const updateVolume = (nextVolume: number) => {
+    setVolume(nextVolume);
+    const media = muxPlayerRef.current;
+    if (!media) return;
+    media.volume = nextVolume;
+    if (nextVolume > 0 && media.muted) media.muted = false;
+    setIsMuted(media.muted);
+  };
+
   const toggleFullscreen = () => {
     if (document.fullscreenElement) {
       void document.exitFullscreen();
@@ -206,15 +216,30 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
           ? <Pause className={isDesktopMinimalControls ? "h-7 w-7" : "h-5 w-5"} />
           : <Play className={`ml-0.5 ${isDesktopMinimalControls ? "h-7 w-7" : "h-5 w-5"}`} />}
       </button>
-      <div className={`flex gap-2 ${isDesktopMinimalControls ? "absolute inset-x-0 top-0 justify-between p-3" : ""}`}>
-        <button
-          type="button"
-          aria-label={isMuted ? "Unmute video" : "Mute video"}
-          onClick={toggleMuted}
-          className={`flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white shadow-sm backdrop-blur-sm transition duration-200 hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isDesktopMinimalControls ? "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100" : "pointer-events-auto"}`}
-        >
-          {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-        </button>
+      <div className={`flex items-center gap-2 ${isDesktopMinimalControls ? "absolute inset-x-0 top-0 justify-between p-3" : ""}`}>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label={isMuted ? "Unmute video" : "Mute video"}
+            onClick={toggleMuted}
+            className={`flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white shadow-sm backdrop-blur-sm transition duration-200 hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isDesktopMinimalControls ? "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100" : "pointer-events-auto"}`}
+          >
+            {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+          </button>
+          {isDesktopMinimalControls && (
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={volume}
+              aria-label="Video volume"
+              aria-valuetext={`${Math.round(volume * 100)}%`}
+              onChange={(event) => updateVolume(Number(event.currentTarget.value))}
+              className="pointer-events-none h-1 w-20 cursor-pointer accent-white opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
+            />
+          )}
+        </div>
         <button
           type="button"
           aria-label="View video fullscreen"
@@ -233,7 +258,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
       className={frameClass}
       style={frameStyle}
       onClick={isDesktopMinimalControls ? (event) => {
-        if (event.target instanceof Element && event.target.closest("button")) return;
+        if (event.target instanceof Element && event.target.closest("button, input")) return;
         togglePlayback();
       } : undefined}
     >
@@ -244,14 +269,20 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
             playbackId={playbackId}
             streamType="on-demand"
             onLoadedMetadata={(event) => {
-              const video = event.currentTarget as typeof event.currentTarget & { videoWidth: number; videoHeight: number; muted: boolean };
+              const video = event.currentTarget as typeof event.currentTarget & { videoWidth: number; videoHeight: number; muted: boolean; volume: number };
+              video.volume = volume;
               updateAspectRatio(video.videoWidth, video.videoHeight);
               setIsMuted(video.muted);
+              setVolume(video.volume);
             }}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
             onEnded={() => setIsPlaying(false)}
-            onVolumeChange={(event) => setIsMuted((event.currentTarget as MuxPlayerElement).muted)}
+            onVolumeChange={(event) => {
+              const media = event.currentTarget as MuxPlayerElement;
+              setIsMuted(media.muted);
+              setVolume(media.volume);
+            }}
             style={muxPlayerStyle}
           />
         </Suspense>
