@@ -37,7 +37,6 @@ import {
   Wine,
   IceCream,
   Search,
-  Filter,
   ShoppingCart,
   Plus,
   Minus,
@@ -452,6 +451,23 @@ const MenuPage = () => {
 
         <MenuSpecialOffer />
 
+        <div role="group" aria-label="Menu categories" className="mb-8 flex flex-wrap justify-center gap-2">
+          {categories.map((category) => (
+            <Button
+              key={category.id}
+              variant={selectedCategory === category.id ? "default" : "ghost"}
+              aria-pressed={selectedCategory === category.id}
+              className={`flex items-center gap-2 ${
+                selectedCategory === category.id ? "sheraton-gradient text-white" : ""
+              }`}
+              onClick={() => setSelectedCategory(category.id)}
+            >
+              <category.icon className="h-4 w-4" />
+              <span>{category.name}</span>
+            </Button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Filters and Categories */}
           <div className="lg:col-span-1 space-y-6">
@@ -470,36 +486,6 @@ const MenuPage = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full"
                 />
-              </CardContent>
-            </Card>
-
-            {/* Categories */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Filter className="h-5 w-5 text-sheraton-gold" />
-                  Categories
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex gap-2 overflow-x-auto pb-2 md:flex-col md:overflow-visible md:pb-0">
-                {categories.map((category) => (
-                  <Button
-                    key={category.id}
-                    variant={
-                      selectedCategory === category.id ? "default" : "ghost"
-                    }
-                    aria-pressed={selectedCategory === category.id}
-                    className={`w-auto shrink-0 justify-start gap-2 md:w-full ${
-                      selectedCategory === category.id
-                        ? "sheraton-gradient text-white"
-                        : ""
-                    }`}
-                    onClick={() => setSelectedCategory(category.id)}
-                  >
-                    <category.icon className="h-4 w-4" />
-                    {category.name}
-                  </Button>
-                ))}
               </CardContent>
             </Card>
 
