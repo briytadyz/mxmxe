@@ -228,14 +228,21 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   );
 
   return (
-    <div ref={frameRef} className={frameClass} style={frameStyle}>
+    <div
+      ref={frameRef}
+      className={frameClass}
+      style={frameStyle}
+      onClick={isDesktopMinimalControls ? (event) => {
+        if (event.target instanceof Element && event.target.closest("button")) return;
+        togglePlayback();
+      } : undefined}
+    >
       {playbackId && hasEnteredLoadRange && (
         <Suspense fallback={null}>
           <MuxPlayer
             ref={muxPlayerRef}
             playbackId={playbackId}
             streamType="on-demand"
-            onClick={isDesktopMinimalControls ? togglePlayback : undefined}
             onLoadedMetadata={(event) => {
               const video = event.currentTarget as typeof event.currentTarget & { videoWidth: number; videoHeight: number; muted: boolean };
               updateAspectRatio(video.videoWidth, video.videoHeight);
