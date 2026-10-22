@@ -168,6 +168,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
     "--controls": controlsMode === "minimal" ? "none" : undefined,
   } as React.CSSProperties & { [key: `--${string}`]: string | undefined };
   const isDesktopMinimalControls = controlsMode === "minimal" && viewportWidth >= 768;
+  const isMobileMinimalControls = controlsMode === "minimal" && viewportWidth < 768;
   const frameClass = `${presentation === "immersive"
     ? "relative w-full overflow-hidden bg-black"
     : "relative mx-auto w-full overflow-hidden rounded-xl bg-black shadow-md"} ${isDesktopMinimalControls ? "group" : ""}`;
@@ -224,24 +225,24 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   };
 
   const minimalControls = controlsMode === "minimal" && (
-    <div className={`pointer-events-none absolute z-20 ${isDesktopMinimalControls ? "inset-0" : "inset-x-0 top-0 flex items-start justify-between p-3"}`}>
+    <div className={`pointer-events-none absolute z-20 ${isDesktopMinimalControls || isMobileMinimalControls ? "inset-0" : "inset-x-0 top-0 flex items-start justify-between p-3"}`}>
       <button
         type="button"
         aria-label={isPlaying ? "Pause video" : "Play video"}
         onClick={togglePlayback}
-        className={`pointer-events-auto flex items-center justify-center rounded-full bg-black/35 text-white shadow-sm backdrop-blur-sm transition duration-200 hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isDesktopMinimalControls ? `absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 ${isPlaying ? "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100" : "opacity-100"}` : "h-10 w-10"}`}
+        className={`pointer-events-auto flex items-center justify-center rounded-full bg-black/25 text-white shadow-sm backdrop-blur-sm transition duration-200 hover:bg-black/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isDesktopMinimalControls || isMobileMinimalControls ? `absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 ${isPlaying ? isDesktopMinimalControls ? "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100" : "pointer-events-none opacity-0" : "opacity-100"}` : "h-10 w-10"}`}
       >
         {isPlaying
-          ? <Pause className={isDesktopMinimalControls ? "h-7 w-7" : "h-5 w-5"} />
-          : <Play className={`ml-0.5 ${isDesktopMinimalControls ? "h-7 w-7" : "h-5 w-5"}`} />}
+          ? <Pause className="h-7 w-7" />
+          : <Play className="ml-0.5 h-7 w-7" />}
       </button>
-      <div className={`flex items-center gap-2 ${isDesktopMinimalControls ? "absolute inset-x-0 top-0 justify-between p-3" : ""}`}>
+      <div className={`flex items-center gap-2 ${isDesktopMinimalControls || isMobileMinimalControls ? "absolute inset-x-0 top-0 justify-between p-3" : ""}`}>
         <div className="flex items-center gap-2">
           <button
             type="button"
             aria-label={isMuted ? "Unmute video" : "Mute video"}
             onClick={toggleMuted}
-            className={`flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white shadow-sm backdrop-blur-sm transition duration-200 hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isDesktopMinimalControls ? "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100" : "pointer-events-auto"}`}
+            className={`flex h-10 w-10 items-center justify-center rounded-full bg-black/25 text-white shadow-sm backdrop-blur-sm transition duration-200 hover:bg-black/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isDesktopMinimalControls ? "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100" : "pointer-events-auto"}`}
           >
             {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
           </button>
@@ -263,7 +264,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
           type="button"
           aria-label="View video fullscreen"
           onClick={toggleFullscreen}
-          className={`flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white shadow-sm backdrop-blur-sm transition duration-200 hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isDesktopMinimalControls ? "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100" : "pointer-events-auto"}`}
+          className={`flex h-10 w-10 items-center justify-center rounded-full bg-black/25 text-white shadow-sm backdrop-blur-sm transition duration-200 hover:bg-black/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isDesktopMinimalControls ? "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100" : "pointer-events-auto"}`}
         >
           <Maximize className="h-5 w-5" />
         </button>
@@ -276,7 +277,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
       ref={frameRef}
       className={frameClass}
       style={frameStyle}
-      onClick={isDesktopMinimalControls ? (event) => {
+      onClick={isDesktopMinimalControls || isMobileMinimalControls ? (event) => {
         if (event.target instanceof Element && event.target.closest("button, input")) return;
         togglePlayback();
       } : undefined}
