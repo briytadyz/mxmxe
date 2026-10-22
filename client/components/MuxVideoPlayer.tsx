@@ -129,9 +129,9 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
 
   const isPortrait = aspectRatio !== null && aspectRatio < 1;
   const isImmersivePortrait = presentation === "immersive" && isPortrait;
-  const fillPortraitFrame = isImmersivePortrait && viewportWidth < 640;
+  const isMobilePortraitFrame = isImmersivePortrait && viewportWidth < 640;
   const frameStyle: React.CSSProperties = presentation === "immersive"
-    ? fillPortraitFrame
+    ? isMobilePortraitFrame
       ? { width: "100%", height: "min(68svh, 560px)" }
       : isImmersivePortrait
         ? { aspectRatio: aspectRatio ?? undefined, width: "100%", maxWidth: "100%" }
@@ -150,7 +150,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
   const muxPlayerStyle = {
     width: "100%",
     height: "100%",
-    "--media-object-fit": fillPortraitFrame ? "cover" : "contain",
+    "--media-object-fit": "contain",
     "--media-object-position": "50% 35%",
     "--controls": controlsMode === "minimal" ? "none" : undefined,
   } as React.CSSProperties & { [key: `--${string}`]: string | undefined };

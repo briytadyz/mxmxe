@@ -580,7 +580,7 @@ const MenuPage = () => {
                       availability.status === "out" ? "opacity-80" : ""
                     }`}
                   >
-                    <CardContent className={`p-0 ${isDesktopPortraitMedia ? "md:grid md:grid-cols-[minmax(200px,0.7fr)_minmax(0,1.7fr)] md:items-stretch" : ""}`}>
+                    <CardContent className={`p-0 ${isDesktopPortraitMedia ? "md:grid md:grid-cols-[minmax(210px,0.75fr)_minmax(0,1.65fr)] md:items-stretch" : ""}`}>
                       {item.mediaUrl && (
                         item.mediaType === "video" ? (
                           <div className={isDesktopPortraitMedia ? "min-w-0" : "w-full"}>
