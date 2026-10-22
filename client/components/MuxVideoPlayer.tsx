@@ -335,7 +335,7 @@ export const MuxVideoPlayer: React.FC<MuxVideoPlayerProps> = ({
               backgroundPosition: "left center, center, center",
               backgroundRepeat: "no-repeat",
             }}
-            className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 h-3 w-full cursor-pointer appearance-none transition-[background-size] duration-200 focus-visible:outline-none [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:w-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-3 w-full cursor-pointer appearance-none opacity-0 transition-[opacity,background-size] duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:outline-none [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:w-2 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white"
           />
         </>
       )}
