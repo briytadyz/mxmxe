@@ -676,8 +676,8 @@ const MenuPage = () => {
                       )}
                       <div className={`flex min-w-0 flex-col md:flex-row ${isDesktopPortraitMedia ? "md:col-start-2" : ""}`}>
                         {/* Item Image and Basic Info */}
-                        <div className="min-w-0 flex-1 p-4 md:p-6">
-                          <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0 flex-1 p-4 md:p-5">
+                          <div className="mb-4 flex flex-col gap-4 md:mb-3 md:flex-row md:items-start md:justify-between md:gap-3">
                             <div className="flex min-w-0 items-start gap-3 md:items-center md:gap-4">
                               {!isVideoItem && !isDesktopPortraitMedia && <div className="shrink-0 text-4xl md:text-5xl" aria-hidden="true">{item.image}</div>}
                               <div className="min-w-0">
@@ -735,8 +735,8 @@ const MenuPage = () => {
                             </div>
 
                             {/* Price and Availability */}
-                            {(!isVideoItem || !isMobilePortraitVideo) && <div className="w-full text-left md:w-auto md:text-right">
-                              <div className="mb-2 flex flex-wrap items-center gap-2">
+                            {(!isVideoItem || !isMobilePortraitVideo) && <div className="w-full text-left md:w-auto md:min-w-[136px] md:shrink-0 md:rounded-lg md:bg-muted/40 md:p-3 md:text-right">
+                              <div className="mb-2 flex flex-wrap items-center gap-2 md:mb-1 md:flex-col md:items-end md:gap-0">
                                 {discountPercent > 0 && (
                                   <span className="text-sm text-muted-foreground line-through" aria-label={`Original price ${formatPrice(item.originalPrice, item.currency)}`}>
                                     {formatPrice(item.originalPrice, item.currency)}
@@ -767,7 +767,7 @@ const MenuPage = () => {
 
                           {/* Detailed Information */}
                           {(item.description_full !== item.description || item.chef_note) && (
-                            <div className="mb-4 rounded-lg bg-muted/60 p-3 text-card-foreground md:p-4">
+                            <div className="mb-4 rounded-lg bg-muted/60 p-3 text-card-foreground md:mb-3 md:p-3">
                               {item.description_full !== item.description && (
                                 <p className="mb-2 break-words text-sm text-muted-foreground">
                                   {item.description_full}
@@ -783,49 +783,49 @@ const MenuPage = () => {
                           )}
 
                           {/* Tags and Dietary Info */}
-                          <div className="mb-4 flex flex-wrap items-center gap-2">
-                            <div className="flex items-center gap-1">
-                              <Star className="h-4 w-4 text-yellow-500" />
-                              <span className="text-sm">
-                                {item.popularity}% loved
-                              </span>
+                          <div className="mb-4 grid gap-3 md:mb-3 md:grid-cols-[minmax(0,1fr)_minmax(180px,220px)] md:items-center">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex items-center gap-1">
+                                <Star className="h-4 w-4 text-yellow-500" />
+                                <span className="text-sm">
+                                  {item.popularity}% loved
+                                </span>
+                              </div>
+                              {item.dietary.includes("vegetarian") && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-green-600 border-green-600"
+                                >
+                                  <Leaf className="h-3 w-3 mr-1" />
+                                  Vegetarian
+                                </Badge>
+                              )}
+                              {item.dietary.includes("gluten-free") && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-blue-600 border-blue-600"
+                                >
+                                  Gluten-Free
+                                </Badge>
+                              )}
+                              {item.spiceLevel > 0 && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-red-600 border-red-600"
+                                >
+                                  {Array(item.spiceLevel).fill("🌶️").join("")}
+                                </Badge>
+                              )}
                             </div>
-                            {item.dietary.includes("vegetarian") && (
-                              <Badge
-                                variant="outline"
-                                className="text-green-600 border-green-600"
-                              >
-                                <Leaf className="h-3 w-3 mr-1" />
-                                Vegetarian
-                              </Badge>
-                            )}
-                            {item.dietary.includes("gluten-free") && (
-                              <Badge
-                                variant="outline"
-                                className="text-blue-600 border-blue-600"
-                              >
-                                Gluten-Free
-                              </Badge>
-                            )}
-                            {item.spiceLevel > 0 && (
-                              <Badge
-                                variant="outline"
-                                className="text-red-600 border-red-600"
-                              >
-                                {Array(item.spiceLevel).fill("🌶️").join("")}
-                              </Badge>
+                            {item.special_offer && (
+                              <div className="rounded-lg border border-sheraton-gold/30 bg-sheraton-gold/10 p-2 md:p-2.5">
+                                <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-sheraton-gold">
+                                  <Gift className="h-4 w-4 shrink-0" />
+                                  <span>{item.special_offer}</span>
+                                </div>
+                              </div>
                             )}
                           </div>
-
-                          {/* Special Offer */}
-                          {item.special_offer && (
-                            <div className="mb-4 rounded-lg border border-sheraton-gold/30 bg-sheraton-gold/10 p-2 md:p-3">
-                              <div className="flex flex-wrap items-center gap-2 font-medium text-sheraton-gold">
-                                <Gift className="h-4 w-4" />
-                                <span>{item.special_offer}</span>
-                              </div>
-                            </div>
-                          )}
 
                           {/* Add to Cart */}
                           <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
