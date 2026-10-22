@@ -83,6 +83,7 @@ const MenuManagementPage = () => {
     stationsOperational: null as boolean | null,
   });
   const [kitchenStatusConfigured, setKitchenStatusConfigured] = useState(false);
+  const [kitchenStatusUpdatedAt, setKitchenStatusUpdatedAt] = useState<string | null>(null);
   const [isSavingKitchenStatus, setIsSavingKitchenStatus] = useState(false);
   const [kitchenStatusMessage, setKitchenStatusMessage] = useState("");
   const { uploadFile, isUploading } = useFileUpload();
@@ -127,7 +128,7 @@ const MenuManagementPage = () => {
             .order("created_at", { ascending: true }),
           supabase
             .from("menu_kitchen_status")
-            .select("load_level, preparation_time_min, preparation_time_max, stations_operational")
+            .select("load_level, preparation_time_min, preparation_time_max, stations_operational, updated_at")
             .eq("organization_id", tenant.organizationId)
             .maybeSingle(),
         ]);
@@ -140,6 +141,7 @@ const MenuManagementPage = () => {
             stationsOperational: kitchenSettings.stations_operational,
           });
           setKitchenStatusConfigured(true);
+          setKitchenStatusUpdatedAt(kitchenSettings.updated_at);
         }
       }
     };
@@ -200,6 +202,7 @@ const MenuManagementPage = () => {
     setIsSavingKitchenStatus(true);
     setKitchenStatusMessage("");
     const { data: { user } } = await supabase.auth.getUser();
+    const updatedAt = new Date().toISOString();
     const { error } = await supabase.from("menu_kitchen_status").upsert({
       organization_id: tenant.organizationId,
       load_level: kitchenStatus.loadLevel,
@@ -207,7 +210,7 @@ const MenuManagementPage = () => {
       preparation_time_max: preparationTimeMax,
       stations_operational: kitchenStatus.stationsOperational,
       updated_by: user?.id || null,
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     }, { onConflict: "organization_id" });
     setIsSavingKitchenStatus(false);
 
@@ -217,6 +220,7 @@ const MenuManagementPage = () => {
       return;
     }
     setKitchenStatusConfigured(true);
+    setKitchenStatusUpdatedAt(updatedAt);
     setKitchenStatusMessage("Kitchen status saved.");
   };
 
@@ -465,7 +469,31 @@ const MenuManagementPage = () => {
             </CardTitle>
             <p className="text-sm text-muted-foreground">Staff-maintained estimates; not automatically measured.</p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-5">
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <p className="font-medium">Current kitchen status</p>
+              {kitchenStatusConfigured ? (
+                <>
+                  <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+                    <div>
+                      <dt className="text-muted-foreground">Kitchen load</dt>
+                      <dd className="mt-1 font-semibold capitalize">{kitchenStatus.loadLevel}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">Estimated preparation</dt>
+                      <dd className="mt-1 font-semibold">{kitchenStatus.preparationTimeMin}–{kitchenStatus.preparationTimeMax} minutes</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">Kitchen stations</dt>
+                      <dd className="mt-1 font-semibold">{kitchenStatus.stationsOperational ? "All operational" : "Some unavailable"}</dd>
+                    </div>
+                  </dl>
+                  {kitchenStatusUpdatedAt && <p className="mt-3 text-xs text-muted-foreground">Last updated {new Date(kitchenStatusUpdatedAt).toLocaleString()}</p>}
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-muted-foreground">No kitchen status has been set for this hotel.</p>
+              )}
+            </div>
             <form onSubmit={saveKitchenStatus} className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="kitchen-load">Kitchen load</Label>
@@ -494,7 +522,7 @@ const MenuManagementPage = () => {
               </div>
               <div className="flex flex-col justify-end gap-2">
                 <Button type="submit" disabled={isSavingKitchenStatus}>{isSavingKitchenStatus ? "Saving..." : kitchenStatusConfigured ? "Save Kitchen Status" : "Set Kitchen Status"}</Button>
-                <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{kitchenStatusMessage || (kitchenStatusConfigured ? "Last saved kitchen status is loaded." : "No kitchen status has been configured.")}</p>
+                <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{kitchenStatusMessage}</p>
               </div>
             </form>
           </CardContent>
