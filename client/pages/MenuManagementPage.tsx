@@ -464,6 +464,52 @@ const MenuManagementPage = () => {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              {editingId ? "Edit Dish" : "Add Dish"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={saveItem} className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {tenant && <div className="md:col-span-2 rounded-md border px-3 py-2 text-sm text-muted-foreground">Hotel: {tenant.name}</div>}
+              <div className="space-y-2"><Label htmlFor="name">Dish name *</Label><Input id="name" value={form.name} onChange={(e) => updateField("name", e.target.value)} required /></div>
+              <div className="space-y-2"><Label htmlFor="image">Dish icon</Label><select id="image" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={form.image} onChange={(e) => updateField("image", e.target.value)}><option value="🍽️">🍽️ General dish</option><option value="🍝">🍝 Pasta</option><option value="🥩">🥩 Steak</option><option value="🦞">🦞 Seafood</option><option value="🍲">🍲 Soup</option><option value="🍕">🍕 Pizza</option><option value="🥗">🥗 Salad</option><option value="🍔">🍔 Burger</option><option value="🍰">🍰 Dessert</option><option value="🍫">🍫 Chocolate</option><option value="🍸">🍸 Cocktail</option><option value="🍉">🍉 Fruit</option><option value="☕">☕ Coffee</option></select></div>
+              <div className="space-y-2"><Label htmlFor="currency">Currency</Label><select id="currency" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={form.currency} onChange={(e) => updateField("currency", e.target.value)}><option value="USD">USD — US Dollar ($)</option><option value="EUR">EUR — Euro (€)</option><option value="GBP">GBP — British Pound (£)</option><option value="CAD">CAD — Canadian Dollar ($)</option><option value="AUD">AUD — Australian Dollar ($)</option><option value="JPY">JPY — Japanese Yen (¥)</option><option value="CHF">CHF — Swiss Franc</option><option value="CNY">CNY — Chinese Yuan (¥)</option><option value="INR">INR — Indian Rupee (₹)</option><option value="RWF">RWF — Rwandan Franc</option><option value="KES">KES — Kenyan Shilling</option><option value="TZS">TZS — Tanzanian Shilling</option><option value="CDF">CDF — Congolese Franc</option><option value="UGX">UGX — Ugandan Shilling</option><option value="ZAR">ZAR — South African Rand</option><option value="AED">AED — UAE Dirham</option><option value="SGD">SGD — Singapore Dollar</option></select></div>
+              <div className="space-y-2"><Label htmlFor="price">Current price *</Label><Input id="price" type="number" min="0.01" step="0.01" value={form.price} onChange={(e) => updateField("price", e.target.value)} required /></div>
+              <div className="space-y-2"><Label htmlFor="originalPrice">Original price</Label><Input id="originalPrice" type="number" min="0.01" step="0.01" placeholder="Use for discounts" value={form.originalPrice} onChange={(e) => updateField("originalPrice", e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="cookTime">Preparation time</Label><Input id="cookTime" value={form.cookTime} onChange={(e) => updateField("cookTime", e.target.value)} /></div>
+              <div className="space-y-2 md:col-span-2"><Label>Dish media</Label><div className="flex flex-wrap gap-3"><label className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-accent"><Upload className="h-4 w-4" /> {isUploading ? "Uploading..." : "Upload image/video"}<input className="sr-only" type="file" accept="image/*,video/*" onChange={(e) => handleMediaFile(e.target.files?.[0])} /></label><label className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-accent"><Camera className="h-4 w-4" /> Take photo<input className="sr-only" type="file" accept="image/*" capture="environment" onChange={(e) => handleMediaFile(e.target.files?.[0])} /></label><label className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-accent"><Video className="h-4 w-4" /> Record video<input className="sr-only" type="file" accept="video/*" capture="environment" onChange={(e) => handleMediaFile(e.target.files?.[0])} /></label></div>{form.mediaUrl && <div className="relative mt-3 w-fit"><div className="flex items-center gap-2 rounded-md border p-2">{form.mediaType === "video" ? <video src={form.mediaUrl} className="h-24 w-32 rounded object-cover" muted /> : <img src={form.mediaUrl} alt="Dish preview" className="h-24 w-32 rounded object-cover" />}<Badge variant="outline">{form.mediaType === "video" ? "Video" : "Image"}</Badge><Button type="button" size="icon" variant="ghost" className="text-destructive" aria-label="Remove selected media" onClick={() => setForm((current) => ({ ...current, mediaUrl: "", mediaType: "image" }))}><X className="h-4 w-4" /></Button></div></div>}</div>
+              <div className="space-y-2 md:col-span-2"><Label htmlFor="description">Short description *</Label><Input id="description" value={form.description} onChange={(e) => updateField("description", e.target.value)} required /></div>
+              <div className="space-y-2 md:col-span-2"><Label htmlFor="description_full">Full description</Label><Textarea id="description_full" value={form.description_full} onChange={(e) => updateField("description_full", e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="category">Category</Label><select id="category" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={form.category} onChange={(e) => updateField("category", e.target.value)}><option value="appetizers">Appetizers</option><option value="mains">Main Courses</option><option value="desserts">Desserts</option><option value="beverages">Beverages</option><option value="special">Special Offers</option></select></div>
+              <div className="space-y-2"><Label htmlFor="origin">Origin</Label><Input id="origin" value={form.origin} onChange={(e) => updateField("origin", e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="dietary">Dietary tags</Label><Input id="dietary" placeholder="vegetarian, gluten-free" value={form.dietary} onChange={(e) => updateField("dietary", e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="calories">Calories</Label><Input id="calories" type="number" min="0" value={form.calories} onChange={(e) => updateField("calories", e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="availability">Available portions</Label><Input id="availability" type="number" min="0" value={form.availability} onChange={(e) => updateField("availability", e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="maxAvailability">Maximum portions *</Label><Input id="maxAvailability" type="number" min="1" value={form.maxAvailability} onChange={(e) => updateField("maxAvailability", e.target.value)} required /></div>
+              <div className="space-y-2 md:col-span-2"><Label htmlFor="chef_note">Chef note</Label><Input id="chef_note" value={form.chef_note} onChange={(e) => updateField("chef_note", e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="statuses">Status labels</Label><Input id="statuses" placeholder="Available, Chef's Pick" value={form.statuses} onChange={(e) => updateField("statuses", e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="special_offer">Promotion label</Label><Input id="special_offer" placeholder="20% off, Happy Hour" value={form.special_offer} onChange={(e) => updateField("special_offer", e.target.value)} /></div>
+              <label className="flex items-center gap-2 text-sm md:col-span-2"><input type="checkbox" checked={form.isSpecial} onChange={(e) => setForm((current) => ({ ...current, isSpecial: e.target.checked }))} /> Mark this dish as Special</label>
+              <div className="md:col-span-2 flex gap-3"><Button type="submit" disabled={isSaving}>{isSaving ? "Saving..." : editingId ? "Save Changes" : "Publish Dish"}</Button>{editingId && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}</div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Published and Draft Dishes</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {items.map((item) => (
+              <div key={item.id} className="border rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3"><span className="text-3xl">{item.image}</span><div><p className="font-semibold">{item.name}</p><p className="text-sm text-muted-foreground">{item.category} · {item.currency || "USD"} {item.price.toFixed(2)} · {item.availability}/{item.maxAvailability} available</p></div></div>
+                <div className="flex items-center gap-2"><Badge variant={item.approved ? "default" : "outline"}>{item.approved ? "Published" : "Hidden"}</Badge>{item.trending && <Badge className="bg-red-100 text-red-700">Trending</Badge>}<Button size="sm" variant="outline" onClick={() => editItem(item)}><Edit2 className="h-4 w-4 mr-1" /> Edit</Button><Button size="sm" variant="outline" onClick={() => toggleTrending(item.id)}>{item.trending ? "Remove Trending" : "Mark Trending"}</Button><Button size="sm" variant="outline" onClick={() => toggleVisibility(item.id)}>{item.approved ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}{item.approved ? "Hide" : "Publish"}</Button><Button size="sm" variant="ghost" className="text-destructive" onClick={() => removeItem(item.id)}><Trash2 className="h-4 w-4" /></Button></div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <Zap className="h-5 w-5" />
               Kitchen Status
             </CardTitle>
@@ -525,52 +571,6 @@ const MenuManagementPage = () => {
                 <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{kitchenStatusMessage}</p>
               </div>
             </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5" />
-              {editingId ? "Edit Dish" : "Add Dish"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={saveItem} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {tenant && <div className="md:col-span-2 rounded-md border px-3 py-2 text-sm text-muted-foreground">Hotel: {tenant.name}</div>}
-              <div className="space-y-2"><Label htmlFor="name">Dish name *</Label><Input id="name" value={form.name} onChange={(e) => updateField("name", e.target.value)} required /></div>
-              <div className="space-y-2"><Label htmlFor="image">Dish icon</Label><select id="image" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={form.image} onChange={(e) => updateField("image", e.target.value)}><option value="🍽️">🍽️ General dish</option><option value="🍝">🍝 Pasta</option><option value="🥩">🥩 Steak</option><option value="🦞">🦞 Seafood</option><option value="🍲">🍲 Soup</option><option value="🍕">🍕 Pizza</option><option value="🥗">🥗 Salad</option><option value="🍔">🍔 Burger</option><option value="🍰">🍰 Dessert</option><option value="🍫">🍫 Chocolate</option><option value="🍸">🍸 Cocktail</option><option value="🍉">🍉 Fruit</option><option value="☕">☕ Coffee</option></select></div>
-              <div className="space-y-2"><Label htmlFor="currency">Currency</Label><select id="currency" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={form.currency} onChange={(e) => updateField("currency", e.target.value)}><option value="USD">USD — US Dollar ($)</option><option value="EUR">EUR — Euro (€)</option><option value="GBP">GBP — British Pound (£)</option><option value="CAD">CAD — Canadian Dollar ($)</option><option value="AUD">AUD — Australian Dollar ($)</option><option value="JPY">JPY — Japanese Yen (¥)</option><option value="CHF">CHF — Swiss Franc</option><option value="CNY">CNY — Chinese Yuan (¥)</option><option value="INR">INR — Indian Rupee (₹)</option><option value="RWF">RWF — Rwandan Franc</option><option value="KES">KES — Kenyan Shilling</option><option value="TZS">TZS — Tanzanian Shilling</option><option value="CDF">CDF — Congolese Franc</option><option value="UGX">UGX — Ugandan Shilling</option><option value="ZAR">ZAR — South African Rand</option><option value="AED">AED — UAE Dirham</option><option value="SGD">SGD — Singapore Dollar</option></select></div>
-              <div className="space-y-2"><Label htmlFor="price">Current price *</Label><Input id="price" type="number" min="0.01" step="0.01" value={form.price} onChange={(e) => updateField("price", e.target.value)} required /></div>
-              <div className="space-y-2"><Label htmlFor="originalPrice">Original price</Label><Input id="originalPrice" type="number" min="0.01" step="0.01" placeholder="Use for discounts" value={form.originalPrice} onChange={(e) => updateField("originalPrice", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="cookTime">Preparation time</Label><Input id="cookTime" value={form.cookTime} onChange={(e) => updateField("cookTime", e.target.value)} /></div>
-              <div className="space-y-2 md:col-span-2"><Label>Dish media</Label><div className="flex flex-wrap gap-3"><label className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-accent"><Upload className="h-4 w-4" /> {isUploading ? "Uploading..." : "Upload image/video"}<input className="sr-only" type="file" accept="image/*,video/*" onChange={(e) => handleMediaFile(e.target.files?.[0])} /></label><label className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-accent"><Camera className="h-4 w-4" /> Take photo<input className="sr-only" type="file" accept="image/*" capture="environment" onChange={(e) => handleMediaFile(e.target.files?.[0])} /></label><label className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-accent"><Video className="h-4 w-4" /> Record video<input className="sr-only" type="file" accept="video/*" capture="environment" onChange={(e) => handleMediaFile(e.target.files?.[0])} /></label></div>{form.mediaUrl && <div className="relative mt-3 w-fit"><div className="flex items-center gap-2 rounded-md border p-2">{form.mediaType === "video" ? <video src={form.mediaUrl} className="h-24 w-32 rounded object-cover" muted /> : <img src={form.mediaUrl} alt="Dish preview" className="h-24 w-32 rounded object-cover" />}<Badge variant="outline">{form.mediaType === "video" ? "Video" : "Image"}</Badge><Button type="button" size="icon" variant="ghost" className="text-destructive" aria-label="Remove selected media" onClick={() => setForm((current) => ({ ...current, mediaUrl: "", mediaType: "image" }))}><X className="h-4 w-4" /></Button></div></div>}</div>
-              <div className="space-y-2 md:col-span-2"><Label htmlFor="description">Short description *</Label><Input id="description" value={form.description} onChange={(e) => updateField("description", e.target.value)} required /></div>
-              <div className="space-y-2 md:col-span-2"><Label htmlFor="description_full">Full description</Label><Textarea id="description_full" value={form.description_full} onChange={(e) => updateField("description_full", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="category">Category</Label><select id="category" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={form.category} onChange={(e) => updateField("category", e.target.value)}><option value="appetizers">Appetizers</option><option value="mains">Main Courses</option><option value="desserts">Desserts</option><option value="beverages">Beverages</option><option value="special">Special Offers</option></select></div>
-              <div className="space-y-2"><Label htmlFor="origin">Origin</Label><Input id="origin" value={form.origin} onChange={(e) => updateField("origin", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="dietary">Dietary tags</Label><Input id="dietary" placeholder="vegetarian, gluten-free" value={form.dietary} onChange={(e) => updateField("dietary", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="calories">Calories</Label><Input id="calories" type="number" min="0" value={form.calories} onChange={(e) => updateField("calories", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="availability">Available portions</Label><Input id="availability" type="number" min="0" value={form.availability} onChange={(e) => updateField("availability", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="maxAvailability">Maximum portions *</Label><Input id="maxAvailability" type="number" min="1" value={form.maxAvailability} onChange={(e) => updateField("maxAvailability", e.target.value)} required /></div>
-              <div className="space-y-2 md:col-span-2"><Label htmlFor="chef_note">Chef note</Label><Input id="chef_note" value={form.chef_note} onChange={(e) => updateField("chef_note", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="statuses">Status labels</Label><Input id="statuses" placeholder="Available, Chef's Pick" value={form.statuses} onChange={(e) => updateField("statuses", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="special_offer">Promotion label</Label><Input id="special_offer" placeholder="20% off, Happy Hour" value={form.special_offer} onChange={(e) => updateField("special_offer", e.target.value)} /></div>
-              <label className="flex items-center gap-2 text-sm md:col-span-2"><input type="checkbox" checked={form.isSpecial} onChange={(e) => setForm((current) => ({ ...current, isSpecial: e.target.checked }))} /> Mark this dish as Special</label>
-              <div className="md:col-span-2 flex gap-3"><Button type="submit" disabled={isSaving}>{isSaving ? "Saving..." : editingId ? "Save Changes" : "Publish Dish"}</Button>{editingId && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}</div>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>Published and Draft Dishes</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {items.map((item) => (
-              <div key={item.id} className="border rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-3"><span className="text-3xl">{item.image}</span><div><p className="font-semibold">{item.name}</p><p className="text-sm text-muted-foreground">{item.category} · {item.currency || "USD"} {item.price.toFixed(2)} · {item.availability}/{item.maxAvailability} available</p></div></div>
-                <div className="flex items-center gap-2"><Badge variant={item.approved ? "default" : "outline"}>{item.approved ? "Published" : "Hidden"}</Badge>{item.trending && <Badge className="bg-red-100 text-red-700">Trending</Badge>}<Button size="sm" variant="outline" onClick={() => editItem(item)}><Edit2 className="h-4 w-4 mr-1" /> Edit</Button><Button size="sm" variant="outline" onClick={() => toggleTrending(item.id)}>{item.trending ? "Remove Trending" : "Mark Trending"}</Button><Button size="sm" variant="outline" onClick={() => toggleVisibility(item.id)}>{item.approved ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}{item.approved ? "Hide" : "Publish"}</Button><Button size="sm" variant="ghost" className="text-destructive" onClick={() => removeItem(item.id)}><Trash2 className="h-4 w-4" /></Button></div>
-              </div>
-            ))}
           </CardContent>
         </Card>
       </div>
