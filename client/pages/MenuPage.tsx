@@ -37,6 +37,7 @@ import {
   Wine,
   IceCream,
   Search,
+  Filter,
   ShoppingCart,
   Plus,
   Minus,
@@ -451,22 +452,28 @@ const MenuPage = () => {
 
         <MenuSpecialOffer />
 
-        <div role="group" aria-label="Menu categories" className="mb-8 flex flex-wrap justify-center gap-2">
-          {categories.map((category) => (
-            <Button
-              key={category.id}
-              variant={selectedCategory === category.id ? "default" : "ghost"}
-              aria-pressed={selectedCategory === category.id}
-              className={`flex items-center gap-2 ${
-                selectedCategory === category.id ? "sheraton-gradient text-white" : ""
-              }`}
-              onClick={() => setSelectedCategory(category.id)}
-            >
-              <category.icon className="h-4 w-4" />
-              <span>{category.name}</span>
-            </Button>
-          ))}
-        </div>
+        <section aria-labelledby="menu-categories-heading" className="mb-8">
+          <h2 id="menu-categories-heading" className="mb-4 flex items-center justify-center gap-2 text-lg font-semibold text-sheraton-navy">
+            <Filter className="h-5 w-5 text-sheraton-gold" />
+            Categories
+          </h2>
+          <div role="group" aria-label="Menu categories" className="flex flex-wrap justify-center gap-2">
+            {categories.map((category) => (
+              <Button
+                key={category.id}
+                variant={selectedCategory === category.id ? "default" : "outline"}
+                aria-pressed={selectedCategory === category.id}
+                className={`flex items-center gap-2 ${
+                  selectedCategory === category.id ? "bg-sheraton-gold text-sheraton-navy hover:bg-sheraton-gold" : ""
+                }`}
+                onClick={() => setSelectedCategory(category.id)}
+              >
+                <category.icon className="h-4 w-4" />
+                <span>{category.name}</span>
+              </Button>
+            ))}
+          </div>
+        </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Filters and Categories */}
