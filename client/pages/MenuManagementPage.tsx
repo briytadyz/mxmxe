@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, ChefHat, Edit2, Eye, EyeOff, Plus, Trash2, Upload, Video, X } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle, ChefHat, Edit2, Eye, EyeOff, Plus, Trash2, Upload, Video, X, Zap } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -76,6 +76,15 @@ const MenuManagementPage = () => {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [kitchenStatus, setKitchenStatus] = useState({
+    loadLevel: "",
+    preparationTimeMin: "",
+    preparationTimeMax: "",
+    stationsOperational: null as boolean | null,
+  });
+  const [kitchenStatusConfigured, setKitchenStatusConfigured] = useState(false);
+  const [isSavingKitchenStatus, setIsSavingKitchenStatus] = useState(false);
+  const [kitchenStatusMessage, setKitchenStatusMessage] = useState("");
   const { uploadFile, isUploading } = useFileUpload();
 
   useEffect(() => {
@@ -110,12 +119,28 @@ const MenuManagementPage = () => {
         setPendingProviders((providers || []) as PendingMenuProvider[]);
       }
       if (canManage) {
-        const { data: databaseItems } = await supabase
-          .from("menu_items")
-          .select("*")
-          .eq("organization_id", tenant.organizationId)
-          .order("created_at", { ascending: true });
+        const [{ data: databaseItems }, { data: kitchenSettings }] = await Promise.all([
+          supabase
+            .from("menu_items")
+            .select("*")
+            .eq("organization_id", tenant.organizationId)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("menu_kitchen_status")
+            .select("load_level, preparation_time_min, preparation_time_max, stations_operational")
+            .eq("organization_id", tenant.organizationId)
+            .maybeSingle(),
+        ]);
         setItems((databaseItems || []).map(menuItemFromDatabaseRow));
+        if (kitchenSettings) {
+          setKitchenStatus({
+            loadLevel: kitchenSettings.load_level,
+            preparationTimeMin: String(kitchenSettings.preparation_time_min),
+            preparationTimeMax: String(kitchenSettings.preparation_time_max),
+            stationsOperational: kitchenSettings.stations_operational,
+          });
+          setKitchenStatusConfigured(true);
+        }
       }
     };
 
@@ -155,6 +180,44 @@ const MenuManagementPage = () => {
   const resetForm = () => {
     setForm(emptyForm);
     setEditingId(null);
+  };
+
+  const saveKitchenStatus = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!tenant || isSavingKitchenStatus) return;
+
+    const preparationTimeMin = Number(kitchenStatus.preparationTimeMin);
+    const preparationTimeMax = Number(kitchenStatus.preparationTimeMax);
+    if (
+      !kitchenStatus.loadLevel
+      || !Number.isInteger(preparationTimeMin)
+      || !Number.isInteger(preparationTimeMax)
+      || preparationTimeMin < 0
+      || preparationTimeMax < preparationTimeMin
+      || kitchenStatus.stationsOperational === null
+    ) return;
+
+    setIsSavingKitchenStatus(true);
+    setKitchenStatusMessage("");
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from("menu_kitchen_status").upsert({
+      organization_id: tenant.organizationId,
+      load_level: kitchenStatus.loadLevel,
+      preparation_time_min: preparationTimeMin,
+      preparation_time_max: preparationTimeMax,
+      stations_operational: kitchenStatus.stationsOperational,
+      updated_by: user?.id || null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "organization_id" });
+    setIsSavingKitchenStatus(false);
+
+    if (error) {
+      console.error("Unable to save hotel kitchen status", error);
+      setKitchenStatusMessage("Unable to save kitchen status. Confirm the database migration is applied.");
+      return;
+    }
+    setKitchenStatusConfigured(true);
+    setKitchenStatusMessage("Kitchen status saved.");
   };
 
   const editItem = (item: MenuItem) => {
@@ -393,6 +456,49 @@ const MenuManagementPage = () => {
             </CardContent>
           </Card>
         )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              Kitchen Status
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">Staff-maintained estimates; not automatically measured.</p>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={saveKitchenStatus} className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="kitchen-load">Kitchen load</Label>
+                <select id="kitchen-load" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={kitchenStatus.loadLevel} onChange={(event) => setKitchenStatus((current) => ({ ...current, loadLevel: event.target.value }))} required>
+                  <option value="">Select current load</option>
+                  <option value="light">Light</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="busy">Busy</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stations-operational">Kitchen stations</Label>
+                <select id="stations-operational" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={kitchenStatus.stationsOperational === null ? "" : String(kitchenStatus.stationsOperational)} onChange={(event) => setKitchenStatus((current) => ({ ...current, stationsOperational: event.target.value === "" ? null : event.target.value === "true" }))} required>
+                  <option value="">Select station status</option>
+                  <option value="true">All stations operational</option>
+                  <option value="false">Some stations unavailable</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="preparation-time-min">Preparation time (minutes)</Label>
+                <div className="flex items-center gap-2">
+                  <Input id="preparation-time-min" type="number" min="0" step="1" placeholder="Min" value={kitchenStatus.preparationTimeMin} onChange={(event) => setKitchenStatus((current) => ({ ...current, preparationTimeMin: event.target.value }))} required />
+                  <span>to</span>
+                  <Input aria-label="Maximum preparation time in minutes" type="number" min={kitchenStatus.preparationTimeMin || 0} step="1" placeholder="Max" value={kitchenStatus.preparationTimeMax} onChange={(event) => setKitchenStatus((current) => ({ ...current, preparationTimeMax: event.target.value }))} required />
+                </div>
+              </div>
+              <div className="flex flex-col justify-end gap-2">
+                <Button type="submit" disabled={isSavingKitchenStatus}>{isSavingKitchenStatus ? "Saving..." : kitchenStatusConfigured ? "Save Kitchen Status" : "Set Kitchen Status"}</Button>
+                <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{kitchenStatusMessage || (kitchenStatusConfigured ? "Last saved kitchen status is loaded." : "No kitchen status has been configured.")}</p>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

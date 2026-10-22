@@ -25,7 +25,6 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { Separator } from "../components/ui/separator";
-import { Progress } from "../components/ui/progress";
 import {
   Crown,
   QrCode,
@@ -51,9 +50,7 @@ import {
   Users,
   ChefHat,
   Globe,
-  Zap,
   Bell,
-  CheckCircle,
   Gift,
 } from "lucide-react";
 
@@ -452,7 +449,7 @@ const MenuPage = () => {
 
         <MenuSpecialOffer />
 
-        <section aria-labelledby="menu-categories-heading" className="mb-8">
+        <section aria-labelledby="menu-categories-heading" className="mb-8 lg:hidden">
           <h2 id="menu-categories-heading" className="mb-4 flex items-center justify-center gap-2 text-lg font-semibold text-sheraton-navy">
             <Filter className="h-5 w-5 text-sheraton-gold" />
             Categories
@@ -496,29 +493,31 @@ const MenuPage = () => {
               </CardContent>
             </Card>
 
-            {/* Live Kitchen Status */}
-            <Card className="border-green-200">
+            <Card className="hidden lg:block">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-green-600">
-                  <Zap className="h-5 w-5" />
-                  Live Kitchen Status
+                <CardTitle className="flex items-center gap-2">
+                  <Filter className="h-5 w-5 text-sheraton-gold" />
+                  Categories
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span>Kitchen Load</span>
-                  <span className="text-green-600">Light</span>
-                </div>
-                <Progress value={35} className="h-2" />
-                <div className="text-xs text-muted-foreground">
-                  ⚡ Fast service: Orders ready in 15-25 min
-                </div>
-                <div className="flex items-center gap-2 text-xs text-green-600">
-                  <CheckCircle className="h-3 w-3" />
-                  <span>All stations operational</span>
-                </div>
+              <CardContent className="flex gap-2 overflow-x-auto pb-2 md:flex-col md:overflow-visible md:pb-0">
+                {categories.map((category) => (
+                  <Button
+                    key={category.id}
+                    variant={selectedCategory === category.id ? "default" : "ghost"}
+                    aria-pressed={selectedCategory === category.id}
+                    className={`w-auto shrink-0 justify-start gap-2 md:w-full ${
+                      selectedCategory === category.id ? "sheraton-gradient text-white" : ""
+                    }`}
+                    onClick={() => setSelectedCategory(category.id)}
+                  >
+                    <category.icon className="h-4 w-4" />
+                    {category.name}
+                  </Button>
+                ))}
               </CardContent>
             </Card>
+
           </div>
 
           {/* Menu Items */}
