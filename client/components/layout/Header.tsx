@@ -67,7 +67,6 @@ const Header = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const subscriptionRef = useRef<any>(null);
-  const rewardsSubscriptionRef = useRef<any>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { resolvedTheme, setTheme } = useTheme();
@@ -79,8 +78,6 @@ const Header = () => {
     const initNotifications = async () => {
       subscriptionRef.current?.unsubscribe();
       subscriptionRef.current = null;
-      rewardsSubscriptionRef.current?.unsubscribe();
-      rewardsSubscriptionRef.current = null;
 
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -124,33 +121,6 @@ const Header = () => {
             return program ? { organizationId: program.organizationId, availablePoints: program.availablePoints } : null;
           });
         }
-        if (isMounted) {
-          rewardsSubscriptionRef.current = supabase
-            .channel(`rewards:${user.id}`)
-            .on("postgres_changes", {
-              event: "*",
-              schema: "public",
-              table: "hotel_loyalty_accounts",
-              filter: `user_id=eq.${user.id}`,
-            }, (payload) => {
-              if (!isMounted) return;
-              if (payload.eventType === "DELETE") {
-                const deletedAccount = payload.old as { organization_id: string };
-                setRewardsBalance((current) => current?.organizationId === deletedAccount.organization_id ? null : current);
-                return;
-              }
-              const updatedAccount = payload.new as { organization_id: string; available_points: number };
-              setRewardsBalance((current) => {
-                if (current && current.organizationId !== updatedAccount.organization_id) return current;
-                return {
-                  organizationId: updatedAccount.organization_id,
-                  availablePoints: Number(updatedAccount.available_points),
-                };
-              });
-            })
-            .subscribe();
-        }
-
         const cachedRole = getCachedHomeIdentity()?.role;
         const role = profile?.role === "manager" || profile?.role === "service_provider"
           ? profile.role
@@ -222,7 +192,19 @@ const Header = () => {
       }
     };
 
+    const refreshRewardsBalance = async () => {
+      if (document.visibilityState !== "visible") return;
+      const { data: programs, error } = await supabase.rpc("get_my_hotel_loyalty_programs");
+      if (error || !isMounted) return;
+      const rewards = (programs || []) as Array<{ organizationId: string; availablePoints: number }>;
+      setRewardsBalance((current) => {
+        const program = rewards.find((candidate) => candidate.organizationId === current?.organizationId) || rewards[0];
+        return program ? { organizationId: program.organizationId, availablePoints: program.availablePoints } : null;
+      });
+    };
+
     initNotifications();
+    document.addEventListener("visibilitychange", refreshRewardsBalance);
 
     const { data: authSubscription } = supabase.auth.onAuthStateChange(
       (_event, session) => {
@@ -245,11 +227,10 @@ const Header = () => {
 
     return () => {
       isMounted = false;
+      document.removeEventListener("visibilitychange", refreshRewardsBalance);
       authSubscription.subscription.unsubscribe();
       subscriptionRef.current?.unsubscribe();
       subscriptionRef.current = null;
-      rewardsSubscriptionRef.current?.unsubscribe();
-      rewardsSubscriptionRef.current = null;
     };
   }, []);
 
@@ -269,8 +250,6 @@ const Header = () => {
     setRewardsBalance(null);
     subscriptionRef.current?.unsubscribe();
     subscriptionRef.current = null;
-    rewardsSubscriptionRef.current?.unsubscribe();
-    rewardsSubscriptionRef.current = null;
     clearCachedHomeIdentity();
     setNotifications([]);
     setUnreadCount(0);
