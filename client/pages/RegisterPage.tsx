@@ -23,9 +23,11 @@ import { Textarea } from "../components/ui/textarea";
 import { Switch } from "../components/ui/switch";
 import { Badge } from "../components/ui/badge";
 import { supabase } from "../lib/supabase";
+import { useHotelTenant } from "../lib/hotelTenant";
 
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
+  const { tenant } = useHotelTenant();
   const [searchParams] = useSearchParams();
   const requestedReturnTo = searchParams.get("returnTo");
   const returnTo = requestedReturnTo?.startsWith("/") && !requestedReturnTo.startsWith("//") ? requestedReturnTo : "/profile";
@@ -72,7 +74,6 @@ const RegisterPage: React.FC = () => {
     smsNotifications: false,
     marketingEmails: true,
     referralCode: new URLSearchParams(window.location.search).get("ref") || "",
-    loyaltyOrganizationId: new URLSearchParams(window.location.search).get("loyaltyOrganization") || "",
   });
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -179,7 +180,7 @@ const RegisterPage: React.FC = () => {
             service_category: formData.serviceCategory || null,
             menu_access_role: formData.menuAccessRole || null,
             referral_code: formData.referralCode.trim().toUpperCase() || null,
-            loyalty_organization_id: formData.loyaltyOrganizationId || null,
+            loyalty_organization_id: tenant?.organizationId || null,
           },
         },
       });

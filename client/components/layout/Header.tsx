@@ -91,6 +91,7 @@ const Header = () => {
           return;
         }
 
+        void refreshSharedRewardsBalance();
         setIsPlatformAdmin(false);
         try {
           const { data: sessionData } = await supabase.auth.getSession();
@@ -106,21 +107,11 @@ const Header = () => {
           setIsPlatformAdmin(false);
         }
 
-        const [{ data: profile }, { data: rewardPrograms, error: rewardProgramsError }] = await Promise.all([
-          supabase
-            .from("user_profiles")
-            .select("role, first_name, last_name, menu_access_role, menu_access_approved")
-            .eq("user_id", user.id)
-            .maybeSingle(),
-          supabase.rpc("get_my_hotel_loyalty_programs"),
-        ]);
-        if (!rewardProgramsError && isMounted) {
-          const programs = (rewardPrograms || []) as Array<{ organizationId: string; availablePoints: number }>;
-          setRewardsBalance((current) => {
-            const program = programs.find((candidate) => candidate.organizationId === current?.organizationId) || programs[0];
-            return program ? { organizationId: program.organizationId, availablePoints: program.availablePoints } : null;
-          });
-        }
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("role, first_name, last_name, menu_access_role, menu_access_approved")
+          .eq("user_id", user.id)
+          .maybeSingle();
         const cachedRole = getCachedHomeIdentity()?.role;
         const role = profile?.role === "manager" || profile?.role === "service_provider"
           ? profile.role
@@ -225,7 +216,7 @@ const Header = () => {
       subscriptionRef.current?.unsubscribe();
       subscriptionRef.current = null;
     };
-  }, []);
+  }, [refreshSharedRewardsBalance]);
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();

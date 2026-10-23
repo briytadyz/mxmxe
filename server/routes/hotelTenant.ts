@@ -348,6 +348,46 @@ export const getHotelTenant: RequestHandler = async (request, response) => {
   }
 };
 
+export const getHotelRewards: RequestHandler = async (request, response) => {
+  setPrivateTenantResponse(response);
+  try {
+    const tenant = await resolveRequestHotelTenant(request);
+    const userId = await getAuthenticatedUserId(request.headers.authorization);
+    const rewards = await callTenantRpc("get_hotel_loyalty_program_for_tenant", {
+      target_organization_id: tenant.organizationId,
+      target_user_id: userId,
+    });
+    setPrivateTenantResponse(response);
+    response.json(rewards);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Hotel rewards could not be loaded";
+    response.status(message.includes("Authentication") || message.includes("session has expired") ? 401 : 503).json({ error: message });
+  }
+};
+
+export const updateHotelRewardsEnrollment: RequestHandler = async (request, response) => {
+  setPrivateTenantResponse(response);
+  try {
+    const tenant = await resolveRequestHotelTenant(request);
+    const userId = await getAuthenticatedUserId(request.headers.authorization);
+    const { enrolled } = request.body as { enrolled?: unknown };
+    if (typeof enrolled !== "boolean") {
+      response.status(400).json({ error: "Enrollment preference is invalid" });
+      return;
+    }
+    const result = await callTenantRpc<boolean>("set_hotel_loyalty_enrollment_for_tenant", {
+      target_organization_id: tenant.organizationId,
+      target_user_id: userId,
+      target_enrolled: enrolled,
+    });
+    setPrivateTenantResponse(response);
+    response.json({ enrolled: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Rewards preference could not be saved";
+    response.status(message.includes("Authentication") || message.includes("session has expired") ? 401 : 503).json({ error: message });
+  }
+};
+
 export const getPublicHotelBookingData: RequestHandler = async (request, response) => {
   try {
     const tenant = await resolveRequestHotelTenant(request);

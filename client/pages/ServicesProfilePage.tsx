@@ -5,7 +5,7 @@ import { BillingTab } from "./components/BillingTab";
 import { supabase } from "../lib/supabase";
 import { useToast } from "../hooks/use-toast";
 import { useHotelTenant } from "../lib/hotelTenant";
-import { useRewardsPoints } from "../lib/rewardsPointsContext";
+import { fetchCurrentHotelRewards, updateCurrentHotelRewardsEnrollment, useRewardsPoints, type HotelRewardsSummary } from "../lib/rewardsPointsContext";
 import {
   Card,
   CardContent,
@@ -79,31 +79,6 @@ import {
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 
-type RewardsSummary = {
-  organizationId: string;
-  organizationName: string;
-  programName: string;
-  availablePoints: number;
-  lifetimePoints: number;
-  enrolled: boolean;
-  debtPoints: number;
-  referralCode: string | null;
-  referrals: { total: number; qualified: number; pending: number; pointsEarned: number };
-  entries: Array<{ id: string; entryType: string; pointsDelta: number; description: string; createdAt: string }>;
-  policy: {
-    pointsPer1000Ugx: number;
-    guestReferralMinimumUgx: number;
-    referrerBonusPoints: number;
-    inviteeBonusPoints: number;
-    taskApprovalPoints: number;
-    monthlyTaskPointsCap: number;
-    ugxValuePerPoint: number;
-    redemptionEnabled: boolean;
-    pointsExpire: boolean;
-    programEnabled: boolean;
-  };
-};
-
 type DirectoryListing = {
   isListed: boolean;
   visibilityScope: "ecosystem" | "hotel";
@@ -166,8 +141,7 @@ const ServicesProfilePage = () => {
   const [directoryListing, setDirectoryListing] = useState<DirectoryListing | null>(null);
   const [directoryError, setDirectoryError] = useState("");
   const [directoryProfile, setDirectoryProfile] = useState<DirectoryForm>(emptyDirectoryForm);
-  const [rewardsPrograms, setRewardsPrograms] = useState<RewardsSummary[]>([]);
-  const [selectedRewardsOrganization, setSelectedRewardsOrganization] = useState("");
+  const [rewardsSummary, setRewardsSummary] = useState<HotelRewardsSummary | null>(null);
   const [rewardsLoadError, setRewardsLoadError] = useState(false);
   const saveTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
   const userIdRef = useRef<string | null>(null);
@@ -301,18 +275,6 @@ const ServicesProfilePage = () => {
           memberSince: resolvedProfile?.created_at ? resolvedProfile.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
           profilePicture: resolvedProfile?.profile_picture || "",
         }));
-        const { data: rewards, error: rewardsError } = await supabase.rpc("get_my_hotel_loyalty_programs");
-        if (rewardsError) {
-          console.error("Unable to load hotel rewards programs:", rewardsError);
-          setRewardsLoadError(true);
-        } else {
-          const programs = (rewards || []) as RewardsSummary[];
-          setRewardsPrograms(programs);
-          setSelectedRewardsOrganization((current) =>
-            programs.some((program) => program.organizationId === current) ? current : programs[0]?.organizationId || "",
-          );
-          setRewardsLoadError(false);
-        }
         setDataLoaded(true);
       } catch (error) {
         console.error("Unable to initialize profile:", error);
@@ -322,6 +284,26 @@ const ServicesProfilePage = () => {
 
     fetchUserProfile();
   }, [navigate]);
+
+  useEffect(() => {
+    let active = true;
+    setRewardsSummary(null);
+    if (!tenant?.organizationId) {
+      setRewardsLoadError(false);
+      return () => { active = false; };
+    }
+    fetchCurrentHotelRewards().then((summary) => {
+      if (!active) return;
+      setRewardsSummary(summary);
+      setRewardsLoadError(false);
+    }).catch((error) => {
+      console.error("Unable to load hotel rewards:", error);
+      if (!active) return;
+      setRewardsSummary(null);
+      setRewardsLoadError(true);
+    });
+    return () => { active = false; };
+  }, [tenant?.organizationId]);
 
   const saveDirectoryProfile = async () => {
     const specialties = directoryProfile.specialties
@@ -419,8 +401,7 @@ const ServicesProfilePage = () => {
     ],
   };
 
-  const rewardsSummary = rewardsPrograms.find((program) => program.organizationId === selectedRewardsOrganization) || null;
-  const displayedAvailablePoints = rewardsBalance?.organizationId === selectedRewardsOrganization
+  const displayedAvailablePoints = rewardsBalance?.organizationId === tenant?.organizationId
     ? rewardsBalance.availablePoints
     : rewardsSummary?.availablePoints ?? 0;
 
@@ -490,7 +471,7 @@ const ServicesProfilePage = () => {
 
   const shareReferralLink = async () => {
     if (!rewardsSummary?.referralCode) return;
-    const url = `${window.location.origin}/register?ref=${encodeURIComponent(rewardsSummary.referralCode)}&loyaltyOrganization=${encodeURIComponent(rewardsSummary.organizationId)}`;
+    const url = `${window.location.origin}/register?ref=${encodeURIComponent(rewardsSummary.referralCode)}`;
     if (navigator.share) {
       await navigator.share({ title: "Join me", text: "Use my referral code when you sign up.", url });
       return;
@@ -499,33 +480,24 @@ const ServicesProfilePage = () => {
     toast({ title: "Referral link copied" });
   };
 
-  const refreshRewardsPrograms = async () => {
-    const { data: programs, error } = await supabase.rpc("get_my_hotel_loyalty_programs");
-    if (error) {
-      toast({ title: "Rewards were saved, but the balance view could not refresh", description: error.message, variant: "destructive" });
-      return;
+  const refreshCurrentHotelRewards = async () => {
+    try {
+      const summary = await fetchCurrentHotelRewards();
+      setRewardsSummary(summary);
+      setRewardsLoadError(false);
+    } catch (error) {
+      toast({ title: "Rewards were saved, but the balance view could not refresh", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
     }
-    const nextPrograms = (programs || []) as RewardsSummary[];
-    setRewardsPrograms(nextPrograms);
-    setSelectedRewardsOrganization((current) =>
-      nextPrograms.some((program) => program.organizationId === current)
-        ? current
-        : nextPrograms[0]?.organizationId || "",
-    );
   };
 
   const updateRewardsEnrollment = async (enrolled: boolean) => {
-    if (!selectedRewardsOrganization) return;
-    const { error } = await supabase.rpc("set_my_hotel_loyalty_enrollment", {
-      target_organization_id: selectedRewardsOrganization,
-      target_enrolled: enrolled,
-    });
-    if (error) {
-      toast({ title: "Rewards preference could not be saved", description: error.message, variant: "destructive" });
-      return;
+    try {
+      await updateCurrentHotelRewardsEnrollment(enrolled);
+      await refreshCurrentHotelRewards();
+      toast({ title: enrolled ? "Rewards enrollment enabled" : "Rewards enrollment paused" });
+    } catch (error) {
+      toast({ title: "Rewards preference could not be saved", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
     }
-    await refreshRewardsPrograms();
-    toast({ title: enrolled ? "Rewards enrollment enabled" : "Rewards enrollment paused" });
   };
 
   return (
@@ -1948,28 +1920,19 @@ const ServicesProfilePage = () => {
             {rewardsLoadError && (
               <Card className="border-amber-300 bg-amber-50">
                 <CardContent className="pt-6 text-sm text-amber-900">
-                  Rewards data is not available yet. Apply the SQL steps in `supabase/loyalty-rewards-implementation.sql` to enable your account.
+                  Rewards data is currently unavailable for this hotel. Please try again later.
                 </CardContent>
               </Card>
             )}
-            {rewardsPrograms.length > 0 && (
+            {rewardsSummary && (
               <div className="max-w-md space-y-2">
-                <Label htmlFor="rewards-hotel">Hotel rewards account</Label>
-                <Select value={selectedRewardsOrganization} onValueChange={setSelectedRewardsOrganization}>
-                  <SelectTrigger id="rewards-hotel"><SelectValue placeholder="Choose a hotel" /></SelectTrigger>
-                  <SelectContent>
-                    {rewardsPrograms.map((program) => (
-                      <SelectItem key={program.organizationId} value={program.organizationId}>
-                        {program.organizationName} — {program.programName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Hotel rewards account</Label>
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{rewardsSummary.organizationName} — {rewardsSummary.programName}</div>
               </div>
             )}
-            {!rewardsLoadError && rewardsPrograms.length === 0 && (
+            {!rewardsLoadError && !rewardsSummary && tenant && (
               <Card><CardContent className="pt-6 text-sm text-muted-foreground">
-                No hotel rewards programs are available yet. Each hotel manages its own program and balance.
+                No rewards program is available for this hotel yet.
               </CardContent></Card>
             )}
             {rewardsSummary && !rewardsSummary.policy.programEnabled && (
