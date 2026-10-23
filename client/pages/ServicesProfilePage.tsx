@@ -5,6 +5,7 @@ import { BillingTab } from "./components/BillingTab";
 import { supabase } from "../lib/supabase";
 import { useToast } from "../hooks/use-toast";
 import { useHotelTenant } from "../lib/hotelTenant";
+import { useRewardsPoints } from "../lib/rewardsPointsContext";
 import {
   Card,
   CardContent,
@@ -153,6 +154,7 @@ const ServicesProfilePage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { tenant } = useHotelTenant();
+  const { rewardsBalance, setRewardsBalance } = useRewardsPoints();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isEditing, setIsEditing] = useState(false);
   const [showPerformanceDetails, setShowPerformanceDetails] = useState(false);
@@ -418,6 +420,17 @@ const ServicesProfilePage = () => {
   };
 
   const rewardsSummary = rewardsPrograms.find((program) => program.organizationId === selectedRewardsOrganization) || null;
+  const displayedAvailablePoints = rewardsBalance?.organizationId === selectedRewardsOrganization
+    ? rewardsBalance.availablePoints
+    : rewardsSummary?.availablePoints ?? 0;
+
+  useEffect(() => {
+    if (!rewardsSummary) return;
+    setRewardsBalance({
+      organizationId: rewardsSummary.organizationId,
+      availablePoints: rewardsSummary.availablePoints,
+    });
+  }, [rewardsSummary?.organizationId, rewardsSummary?.availablePoints, setRewardsBalance]);
 
   const recentActivities = (rewardsSummary?.entries || []).map((entry) => ({
     id: entry.id,
@@ -1986,7 +1999,7 @@ const ServicesProfilePage = () => {
                 <CardContent className="space-y-5">
                   <div className="text-center">
                     <div className="text-4xl font-bold mb-2">
-                      {(rewardsSummary?.availablePoints ?? 0).toLocaleString()}
+                      {displayedAvailablePoints.toLocaleString()}
                     </div>
                     <div className="text-white/80">Available points</div>
                   </div>
