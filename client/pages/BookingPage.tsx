@@ -17,6 +17,7 @@ import { Separator } from "../components/ui/separator";
 import { useToast } from "../hooks/use-toast";
 import { Bed, CalendarDays, Check, CheckCircle, Crown, Gift, Hotel, MapPin, Plus, Users, Wifi } from "lucide-react";
 import { cn } from "../lib/utils";
+import { useRewardsPoints } from "../lib/rewardsPointsContext";
 
 type HotelRoom = {
   id: string;
@@ -50,6 +51,7 @@ const money = (value: number, currency: string) => new Intl.NumberFormat(undefin
 
 const BookingPage = () => {
   const { toast } = useToast();
+  const { refreshRewardsBalance } = useRewardsPoints();
   const [settings, setSettings] = useState<BookingSettings>({ title: "", subtitle: "" });
   const [offers, setOffers] = useState<BookingOffer[]>([]);
   const [rooms, setRooms] = useState<HotelRoom[]>([]);
@@ -218,6 +220,9 @@ const BookingPage = () => {
       return;
     }
     toast({ title: editingRoomId ? "Room listing updated" : "Room listing created" });
+    if (roomValues.status === "published" && (!editingRoomId || rooms.find((room) => room.id === editingRoomId)?.status !== "published")) {
+      await refreshRewardsBalance();
+    }
     setRoomFormOpen(false);
     setEditingRoomId(null);
     await loadPage();
@@ -281,6 +286,7 @@ const BookingPage = () => {
       return;
     }
     toast({ title: status === "published" ? "Room listing published" : "Room listing unpublished" });
+    if (status === "published") await refreshRewardsBalance();
     await loadPage();
   };
 

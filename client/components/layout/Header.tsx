@@ -55,7 +55,7 @@ import {
 
 const Header = () => {
   const { tenant } = useHotelTenant();
-  const { rewardsBalance, setRewardsBalance } = useRewardsPoints();
+  const { rewardsBalance, setRewardsBalance, refreshRewardsBalance: refreshSharedRewardsBalance } = useRewardsPoints();
   const [isOpen, setIsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
@@ -192,15 +192,8 @@ const Header = () => {
       }
     };
 
-    const refreshRewardsBalance = async () => {
-      if (document.visibilityState !== "visible") return;
-      const { data: programs, error } = await supabase.rpc("get_my_hotel_loyalty_programs");
-      if (error || !isMounted) return;
-      const rewards = (programs || []) as Array<{ organizationId: string; availablePoints: number }>;
-      setRewardsBalance((current) => {
-        const program = rewards.find((candidate) => candidate.organizationId === current?.organizationId) || rewards[0];
-        return program ? { organizationId: program.organizationId, availablePoints: program.availablePoints } : null;
-      });
+    const refreshRewardsBalance = () => {
+      if (document.visibilityState === "visible") void refreshSharedRewardsBalance();
     };
 
     initNotifications();
