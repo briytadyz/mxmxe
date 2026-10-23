@@ -39,13 +39,7 @@ import {
   X,
   ShoppingCart,
 } from "lucide-react";
-import {
-  clearPendingCheckout,
-  getPendingCheckout,
-  savePendingCheckout,
-  type FlutterwaveHostedSession,
-  type ResumableMenuOrder,
-} from "../../lib/flutterwave";
+import { clearPendingCheckout, type FlutterwaveHostedSession, type ResumableMenuOrder } from "../../lib/flutterwave";
 import { supabase } from "../../lib/supabase";
 import { syncActiveMenuCart } from "../../lib/menuCart";
 import { useHotelTenant } from "../../lib/hotelTenant";
@@ -129,14 +123,14 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   }, []);
 
   useEffect(() => {
-    const pendingCheckout = resumableOrder || getPendingCheckout();
-    if (!pendingCheckout) return;
+    if (!resumableOrder) return;
 
-    setCustomerInfo(pendingCheckout.customer);
-    setOrderType(pendingCheckout.orderType);
-    setPaymentMethod(pendingCheckout.paymentMethod);
-    setTipAmount(pendingCheckout.tipAmount);
-    setTipPercentage(pendingCheckout.tipPercentage);
+    setCustomerInfo(resumableOrder.customer);
+    setOrderType(resumableOrder.orderType);
+    setPaymentMethod(resumableOrder.paymentMethod);
+    setTipAmount(resumableOrder.tipAmount);
+    setTipPercentage(resumableOrder.tipPercentage);
+    setPendingPaymentOrder({ id: resumableOrder.orderId, orderNumber: resumableOrder.orderNumber });
     setStep("payment");
   }, [resumableOrder]);
 
@@ -163,6 +157,21 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
     loadProfile().catch((error) => console.error("Unable to load checkout profile", error));
   }, []);
+
+  const updateCartItem = (itemId: string, quantity: number) => {
+    setPendingPaymentOrder(null);
+    onUpdateCart(itemId, quantity);
+  };
+
+  const removeCartItem = (itemId: string) => {
+    setPendingPaymentOrder(null);
+    onRemoveFromCart(itemId);
+  };
+
+  const selectPaymentMethod = (method: "card" | "room-charge" | "cash" | "mobile-money") => {
+    if (resumableOrder && method !== resumableOrder.paymentMethod) setPendingPaymentOrder(null);
+    setPaymentMethod(method);
+  };
 
   const getCartItems = () => {
     return Object.entries(cart).map(([itemId, quantity]) => {
@@ -223,7 +232,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     setTipPercentage(percentage);
   };
 
-  const startOnlinePayment = async ({ id, orderNumber }: { id: string; orderNumber: string }) => {
+  const startOnlinePayment = async (order: { id: string }) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error("Please sign in before paying.");
 
@@ -238,7 +247,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
           Authorization: `Bearer ${session.access_token}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ orderId: id }),
+        body: JSON.stringify({ orderId: order.id }),
         signal: controller.signal,
       });
     } finally {
@@ -250,19 +259,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       throw new Error(message || `Unable to prepare secure checkout (HTTP ${sessionResponse.status}).`);
     }
 
-    if (!tenant) throw new Error("This hotel domain is not configured");
-    savePendingCheckout({
-      organizationId: tenant.organizationId,
-      orderId: id,
-      orderNumber,
-      cart,
-      orderType,
-      paymentMethod,
-      tipAmount,
-      tipPercentage,
-      usePoints: false,
-      customer: customerSnapshot,
-    });
     setIsRedirecting(true);
     // Leave the app as a full-document navigation so the provider owns the viewport.
     if (window.top && window.top !== window.self) {
@@ -279,7 +275,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     setCheckoutError("");
 
     try {
-      if (pendingPaymentOrder) {
+      if (pendingPaymentOrder && (paymentMethod === "card" || paymentMethod === "mobile-money")) {
         await startOnlinePayment(pendingPaymentOrder);
         return;
       }
@@ -485,7 +481,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => onUpdateCart(item.id, quantity - 1)}
+                  onClick={() => updateCartItem(item.id, quantity - 1)}
                 >
                   <Minus className="h-3 w-3" />
                 </Button>
@@ -493,14 +489,14 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => onUpdateCart(item.id, quantity + 1)}
+                  onClick={() => updateCartItem(item.id, quantity + 1)}
                 >
                   <Plus className="h-3 w-3" />
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => onRemoveFromCart(item.id)}
+                  onClick={() => removeCartItem(item.id)}
                   className="text-red-500 hover:text-red-700"
                 >
                   <X className="h-3 w-3" />
@@ -691,6 +687,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
               variant={tipPercentage === percentage ? "default" : "outline"}
               size="sm"
               onClick={() => calculateTip(percentage)}
+              disabled={Boolean(resumableOrder)}
               className={
                 tipPercentage === percentage
                   ? "bg-sheraton-gold text-sheraton-navy"
@@ -706,6 +703,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
           <Input
             type="number"
             value={tipAmount.toFixed(2)}
+            disabled={Boolean(resumableOrder)}
             onChange={(e) => {
               const amount = parseFloat(e.target.value) || 0;
               setTipAmount(amount);
@@ -725,7 +723,8 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Button
             variant={paymentMethod === "card" ? "default" : "outline"}
-            onClick={() => setPaymentMethod("card")}
+            disabled={Boolean(resumableOrder)}
+            onClick={() => selectPaymentMethod("card")}
             className={
               paymentMethod === "card"
                 ? "bg-sheraton-gold text-sheraton-navy"
@@ -737,7 +736,8 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
           </Button>
           <Button
             variant={paymentMethod === "room-charge" ? "default" : "outline"}
-            onClick={() => setPaymentMethod("room-charge")}
+            disabled={Boolean(resumableOrder)}
+            onClick={() => selectPaymentMethod("room-charge")}
             className={
               paymentMethod === "room-charge"
                 ? "bg-sheraton-gold text-sheraton-navy"
@@ -749,14 +749,16 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
           </Button>
           <Button
             variant={paymentMethod === "mobile-money" ? "default" : "outline"}
-            onClick={() => setPaymentMethod("mobile-money")}
+            disabled={Boolean(resumableOrder)}
+            onClick={() => selectPaymentMethod("mobile-money")}
             className={paymentMethod === "mobile-money" ? "bg-sheraton-gold text-sheraton-navy" : ""}
           >
             <Smartphone className="h-4 w-4 mr-2" /> Mobile Money
           </Button>
           <Button
             variant={paymentMethod === "cash" ? "default" : "outline"}
-            onClick={() => setPaymentMethod("cash")}
+            disabled={Boolean(resumableOrder)}
+            onClick={() => selectPaymentMethod("cash")}
             className={
               paymentMethod === "cash"
                 ? "bg-sheraton-gold text-sheraton-navy"

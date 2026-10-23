@@ -6,7 +6,7 @@ import CheckoutPage from "../components/checkout/CheckoutPage";
 import MuxVideoPlayer from "../components/MuxVideoPlayer";
 import { menuItemFromDatabaseRow, MenuItem } from "../lib/menuData";
 import { supabase } from "../lib/supabase";
-import { clearPendingCheckout, getPendingCheckout, type ResumableMenuOrder } from "../lib/flutterwave";
+import { clearPendingCheckout, type ResumableMenuOrder } from "../lib/flutterwave";
 import { loadActiveMenuCart, syncActiveMenuCart } from "../lib/menuCart";
 import { useHotelTenant } from "../lib/hotelTenant";
 import {
@@ -118,6 +118,7 @@ const MenuPage = () => {
   const [mediaAspectRatios, setMediaAspectRatios] = useState<Record<string, number>>({});
   const [showCheckoutPage, setShowCheckoutPage] = useState(false);
   const [resumableOrder, setResumableOrder] = useState<ResumableMenuOrder | undefined>();
+  const [resumeCart, setResumeCart] = useState<Record<string, number> | null>(null);
   const [durableCartId, setDurableCartId] = useState<string | null>(null);
   const [cartReady, setCartReady] = useState(false);
 
@@ -129,14 +130,12 @@ const MenuPage = () => {
 
   useEffect(() => {
     if (!tenant) return;
-    const pendingCheckout = getPendingCheckout();
-    if (pendingCheckout?.organizationId === tenant.organizationId) {
-      setCart(pendingCheckout.cart);
-      setShowCheckoutPage(true);
-      setCartReady(true);
-      return;
-    }
-    if (pendingCheckout) clearPendingCheckout();
+    setCartReady(false);
+    setCart({});
+    setDurableCartId(null);
+    setResumableOrder(undefined);
+    setResumeCart(null);
+    clearPendingCheckout();
 
     loadActiveMenuCart(tenant.organizationId)
       .then((savedCart) => {
@@ -152,7 +151,7 @@ const MenuPage = () => {
     let active = true;
 
     const restoreUnpaidOrder = async () => {
-      if (!tenant || getPendingCheckout()?.organizationId === tenant.organizationId) return;
+      if (!tenant) return;
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -201,9 +200,7 @@ const MenuPage = () => {
         },
       };
 
-      setCart(restoredCart);
       setResumableOrder(restoredOrder);
-      setShowCheckoutPage(true);
     };
 
     restoreUnpaidOrder().catch((error) => console.error("Unable to restore unpaid menu order", error));
@@ -408,13 +405,13 @@ const MenuPage = () => {
   if (showCheckoutPage) {
     return (
       <CheckoutPage
-        onBack={() => setShowCheckoutPage(false)}
-        cart={cart}
+        onBack={() => { setShowCheckoutPage(false); setResumeCart(null); }}
+        cart={resumeCart || cart}
         menuItems={menuItems}
-        onUpdateCart={updateCart}
-        onRemoveFromCart={removeFromCartCompletely}
-        resumableOrder={resumableOrder}
-        durableCartId={durableCartId}
+        onUpdateCart={resumeCart ? (itemId, quantity) => setResumeCart((current) => ({ ...(current || {}), [itemId]: quantity })) : updateCart}
+        onRemoveFromCart={resumeCart ? (itemId) => setResumeCart((current) => { const next = { ...(current || {}) }; delete next[itemId]; return next; }) : removeFromCartCompletely}
+        resumableOrder={resumeCart ? resumableOrder : undefined}
+        durableCartId={resumeCart ? null : durableCartId}
       />
     );
   }
@@ -448,6 +445,8 @@ const MenuPage = () => {
         </div>
 
         <MenuSpecialOffer />
+
+        {resumableOrder && <Card className="mb-6 border-sheraton-gold/40 bg-sheraton-gold/5"><CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold text-sheraton-navy">Unfinished order {resumableOrder.orderNumber}</p><p className="text-sm text-muted-foreground">Your menu is ready to browse. Resume payment whenever you’re ready.</p></div><Button className="sheraton-gradient text-white" onClick={() => { setResumeCart(resumableOrder.cart); setShowCheckoutPage(true); }}>Resume Order</Button></CardContent></Card>}
 
         <section aria-labelledby="menu-categories-heading" className="mb-8 lg:hidden">
           <h2 id="menu-categories-heading" className="mb-4 flex items-center justify-center gap-2 text-lg font-semibold text-sheraton-navy">
