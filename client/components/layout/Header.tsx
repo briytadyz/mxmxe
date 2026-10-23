@@ -754,7 +754,7 @@ const Header = () => {
                     className="ml-2 bg-white/20 text-white"
                   >
                     {rewardsBalance && rewardsBalance.availablePoints > 0
-                      ? `Rewards ${rewardsBalance.availablePoints.toLocaleString()}`
+                      ? `${rewardsBalance.availablePoints.toLocaleString()} points`
                       : "Rewards"}
                   </Badge>
                 </Button>
