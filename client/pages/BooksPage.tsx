@@ -45,13 +45,12 @@ const newCorrelationId = () => {
 };
 
 const sanitizeDiagnosticValue = (value: unknown) => typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 500) : value;
-const reportBooksError = (operation: BooksOperation, correlationId: string, organizationId: string | null, recordId: string | null, error: SupabaseErrorLike, source?: string) => {
+const reportBooksError = (operation: BooksOperation, correlationId: string, organizationId: string | null, recordId: string | null, error: SupabaseErrorLike) => {
   console.error("Books operation failed", {
     operation,
     correlationId,
     organizationId,
     recordId,
-    source,
     supabase: {
       code: sanitizeDiagnosticValue(error.code),
       message: sanitizeDiagnosticValue(error.message),
@@ -60,7 +59,7 @@ const reportBooksError = (operation: BooksOperation, correlationId: string, orga
     },
   });
 };
-const operationToast = (title: string, correlationId: string, source?: string) => ({ title, description: `${source ? `Could not load ${source}. ` : ""}Please try again. If the problem continues, share reference ${correlationId} with support.`, variant: "destructive" as const });
+const operationToast = (title: string, correlationId: string) => ({ title, description: `Please try again. If the problem continues, share reference ${correlationId} with support.`, variant: "destructive" as const });
 
 const BooksPage = () => {
   const navigate = useNavigate();
@@ -101,11 +100,10 @@ const BooksPage = () => {
     setLoading(true);
     setCurrencyTotals([]);
     setCurrencyTotalsError(null);
-    let source = "session";
     try {
       const { data: userData, error: authError } = await supabase.auth.getUser();
       if (authError) {
-        reportBooksError(operation, correlationId, organizationId, null, authError, source);
+        reportBooksError(operation, correlationId, organizationId, null, authError);
         toast(operationToast("Books could not verify your session", correlationId));
         return;
       }
@@ -116,12 +114,10 @@ const BooksPage = () => {
       let orgId: string | null = null;
       let orgError: { message: string } | null = null;
       if (isPersonalWorkspace) {
-        source = "personal workspace";
         const result = await supabase.rpc("get_or_create_personal_books_organization");
         orgId = result.data;
         orgError = result.error;
       } else if (requestedOrganizationId || tenant?.organizationId) {
-        source = "workspace membership";
         const selectedOrganizationId = tenant?.organizationId || requestedOrganizationId;
         if (tenant?.organizationId && requestedOrganizationId && requestedOrganizationId !== tenant.organizationId) {
           throw new Error("This Books workspace does not belong to the active hotel.");
@@ -131,18 +127,16 @@ const BooksPage = () => {
         if (!membership.data) throw new Error("You do not have access to this hotel’s Books workspace.");
         orgId = selectedOrganizationId;
       } else {
-        source = "business workspace";
         const result = await supabase.rpc("get_or_create_books_organization");
         orgId = result.data;
         orgError = result.error;
       }
       if (orgError || !orgId) {
-        if (orgError) reportBooksError(operation, correlationId, null, null, orgError, source);
+        if (orgError) reportBooksError(operation, correlationId, null, null, orgError);
         toast(operationToast("Books could not initialize your workspace", correlationId));
         return;
       }
       setOrganizationId(orgId);
-      source = "Books records";
       const [org, contactResult, invoiceResult, expenseResult, accountResult, taxResult, transactionResult, loyaltyPostingResult] = await Promise.all([
         supabase.from("books_organizations").select("base_currency").eq("id", orgId).single(),
         supabase.from("books_contacts").select("id,name,type,email,tax_id").eq("organization_id", orgId).order("name"),
@@ -153,20 +147,11 @@ const BooksPage = () => {
         supabase.from("books_journal_transactions").select("id,transaction_date,books_journal_lines(account_id,debit,credit,currency_code)").eq("organization_id", orgId).order("transaction_date", { ascending: false }),
         supabase.from("hotel_loyalty_books_postings").select("ledger_entry_id,amount_ugx,status,journal_transaction_id,error_message,created_at").eq("organization_id", orgId).order("created_at", { ascending: false }).limit(20),
       ]);
-      const results = [
-        ["organization", org],
-        ["contacts", contactResult],
-        ["invoices", invoiceResult],
-        ["expenses", expenseResult],
-        ["accounts", accountResult],
-        ["tax rates", taxResult],
-        ["journal transactions", transactionResult],
-      ] as const;
-      const failedResult = results.find(([, result]) => result.error);
-      if (failedResult?.[1].error) {
-        source = failedResult[0];
-        reportBooksError(operation, correlationId, orgId, null, failedResult[1].error, source);
-        toast(operationToast("Books could not refresh your records", correlationId, source));
+      const results = [org, contactResult, invoiceResult, expenseResult, accountResult, taxResult, transactionResult];
+      const failedResult = results.find((result) => result.error);
+      if (failedResult?.error) {
+        reportBooksError(operation, correlationId, orgId, null, failedResult.error);
+        toast(operationToast("Books could not refresh your records", correlationId));
         return;
       }
       if (org.data?.base_currency) setBaseCurrency(org.data.base_currency.trim());
@@ -178,19 +163,20 @@ const BooksPage = () => {
       if (!loyaltyPostingResult.error) setLoyaltyPostings((loyaltyPostingResult.data || []) as LoyaltyPosting[]);
       const transactions = (transactionResult.data || []) as Array<{ id: string; transaction_date: string; books_journal_lines: Array<{ account_id: string; debit: number; credit: number; currency_code: string }> }>;
       setLedgerLines(transactions.flatMap((transaction) => transaction.books_journal_lines.map((line) => ({ ...line, transaction_date: transaction.transaction_date }))));
-      source = "currency totals";
-      const { data: totals, error: totalsError } = await supabase.rpc("get_books_currency_totals", { target_organization_id: orgId });
-      if (totalsError) {
-        reportBooksError(operation, correlationId, orgId, null, totalsError, source);
-        setCurrencyTotalsError("Currency totals could not refresh. Use Refresh to try again.");
-        toast(operationToast("Books could not refresh your records", correlationId, source));
-      } else {
-        setCurrencyTotals((totals || []) as CurrencyTotals[]);
+      if (isConsolidatedView) {
+        const { data: totals, error: totalsError } = await supabase.rpc("get_books_currency_totals", { target_organization_id: orgId });
+        if (totalsError) {
+          reportBooksError(operation, correlationId, orgId, null, totalsError);
+          setCurrencyTotalsError("Currency totals could not refresh. Use Refresh to try again.");
+          toast(operationToast("Books could not refresh your records", correlationId));
+        } else {
+          setCurrencyTotals((totals || []) as CurrencyTotals[]);
+        }
+        await refreshExchangeRates();
       }
-      if (isConsolidatedView) await refreshExchangeRates();
     } catch (error) {
-      reportBooksError(operation, correlationId, organizationId, null, error as SupabaseErrorLike, source);
-      toast(operationToast("Books could not refresh your records", correlationId, source));
+      reportBooksError(operation, correlationId, organizationId, null, error as SupabaseErrorLike);
+      toast(operationToast("Books could not refresh your records", correlationId));
     } finally {
       setLoading(false);
     }
