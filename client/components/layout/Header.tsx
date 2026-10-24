@@ -45,6 +45,7 @@ import {
 import { cn } from "../../lib/utils";
 import { supabase, Notification } from "../../lib/supabase";
 import { useHotelTenant } from "../../lib/hotelTenant";
+import { useRewardsPoints } from "../../lib/rewardsPointsContext";
 import { toast } from "../../hooks/use-toast";
 import {
   cacheHomeIdentity,
@@ -54,6 +55,7 @@ import {
 
 const Header = () => {
   const { tenant } = useHotelTenant();
+  const { rewardsBalance, setRewardsBalance, refreshRewardsBalance: refreshSharedRewardsBalance } = useRewardsPoints();
   const [isOpen, setIsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
@@ -80,6 +82,7 @@ const Header = () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user || !isMounted) {
+          setRewardsBalance(null);
           clearCachedHomeIdentity();
           setCanManageMenu(false);
           setIsPlatformAdmin(false);
@@ -88,6 +91,7 @@ const Header = () => {
           return;
         }
 
+        void refreshSharedRewardsBalance();
         setIsPlatformAdmin(false);
         try {
           const { data: sessionData } = await supabase.auth.getSession();
@@ -108,7 +112,6 @@ const Header = () => {
           .select("role, first_name, last_name, menu_access_role, menu_access_approved")
           .eq("user_id", user.id)
           .maybeSingle();
-
         const cachedRole = getCachedHomeIdentity()?.role;
         const role = profile?.role === "manager" || profile?.role === "service_provider"
           ? profile.role
@@ -180,12 +183,18 @@ const Header = () => {
       }
     };
 
+    const refreshRewardsBalance = () => {
+      if (document.visibilityState === "visible") void refreshSharedRewardsBalance();
+    };
+
     initNotifications();
+    document.addEventListener("visibilitychange", refreshRewardsBalance);
 
     const { data: authSubscription } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         if (!isMounted) return;
         if (!session) {
+          setRewardsBalance(null);
           clearCachedHomeIdentity();
           setCanManageMenu(false);
           setIsPlatformAdmin(false);
@@ -202,11 +211,12 @@ const Header = () => {
 
     return () => {
       isMounted = false;
+      document.removeEventListener("visibilitychange", refreshRewardsBalance);
       authSubscription.subscription.unsubscribe();
       subscriptionRef.current?.unsubscribe();
       subscriptionRef.current = null;
     };
-  }, []);
+  }, [refreshSharedRewardsBalance]);
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -221,6 +231,7 @@ const Header = () => {
     }
 
     setIsAccountOpen(false);
+    setRewardsBalance(null);
     subscriptionRef.current?.unsubscribe();
     subscriptionRef.current = null;
     clearCachedHomeIdentity();
@@ -677,7 +688,9 @@ const Header = () => {
                                                 ? "Hotel sale recorded"
                                                 : notification.type === "hotel_loyalty_activity"
                                                   ? "Hotel loyalty activity"
-                                                  : "Task Update"}
+                                                  : notification.type === "menu_item_available"
+                                                    ? "Dish back in stock"
+                                                    : "Task Update"}
                               </p>
                               <p className="text-xs text-muted-foreground line-clamp-2">
                                 {notification.message}
@@ -731,7 +744,9 @@ const Header = () => {
                     variant="secondary"
                     className="ml-2 bg-white/20 text-white"
                   >
-                    Hotel rewards
+                    {rewardsBalance && rewardsBalance.availablePoints > 0
+                      ? `${rewardsBalance.availablePoints.toLocaleString()} points`
+                      : "Rewards"}
                   </Badge>
                 </Button>
               </PopoverTrigger>

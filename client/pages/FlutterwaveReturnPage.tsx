@@ -4,6 +4,7 @@ import { AlertCircle, ArrowLeft, CheckCircle, Loader2, RefreshCw } from "lucide-
 import { Button } from "../components/ui/button";
 import { clearPendingCheckout } from "../lib/flutterwave";
 import { supabase } from "../lib/supabase";
+import { useRewardsPoints } from "../lib/rewardsPointsContext";
 
 type PaymentResult =
   | { status: "loading" }
@@ -33,6 +34,7 @@ const getInitialPaymentResult = (searchParams: URLSearchParams): PaymentResult =
 const FlutterwaveReturnPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { refreshRewardsBalance } = useRewardsPoints();
   const [result, setResult] = useState<PaymentResult>(() => getInitialPaymentResult(searchParams));
   const [verificationAttempt, setVerificationAttempt] = useState(0);
   const [retrying, setRetrying] = useState(false);
@@ -91,6 +93,7 @@ const FlutterwaveReturnPage = () => {
         if (paymentStatus !== "paid") throw new Error(payload?.error || "Payment could not be confirmed.");
         clearPendingCheckout();
         if (hotelBooking) localStorage.removeItem("hotel-booking-access");
+        await refreshRewardsBalance();
         if (active) setResult({ status: "success", orderNumber: orderNumber || "Confirmed", eventPayment, hotelBooking });
       } catch (error) {
         if (active) setResult({ status: "error", message: error instanceof Error ? error.message : "Payment could not be confirmed." });

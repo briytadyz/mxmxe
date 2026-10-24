@@ -6,6 +6,7 @@ import ServicesFooter from "./components/layout/ServicesFooter";
 import ServicesHomePage from "./pages/ServicesHomePage";
 import HomePage from "./pages/HomePage";
 import { supabase } from "./lib/supabase";
+import { RewardsPointsProvider } from "./lib/rewardsPointsContext";
 import {
   cacheHomeIdentity,
   getCachedHomeIdentity,
@@ -132,9 +133,10 @@ function RoleAwareHomePage() {
 
 function App() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <BrowserRouter>
-        <div className="min-h-screen bg-background flex flex-col">
+    <RewardsPointsProvider>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <BrowserRouter>
+          <div className="min-h-screen bg-background flex flex-col">
           <Header />
           <main className="flex-1">
             <Routes>
@@ -190,10 +192,11 @@ function App() {
           </main>
           <ServicesFooter />
           <Toaster />
-          <ToastRenderer />
-        </div>
-      </BrowserRouter>
-    </ThemeProvider>
+            <ToastRenderer />
+          </div>
+        </BrowserRouter>
+      </ThemeProvider>
+    </RewardsPointsProvider>
   );
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, ChefHat, Edit2, Eye, EyeOff, Plus, Trash2, Upload, Video, X } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle, ChefHat, Edit2, Eye, EyeOff, Plus, Trash2, Upload, Video, X, Zap } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -20,6 +20,7 @@ const emptyForm = {
   mediaType: "image" as "image" | "video",
   mediaUrl: "",
   mediaAttachmentId: "",
+  mediaAspectRatio: "",
   price: "",
   originalPrice: "",
   category: "mains" as MenuCategory,
@@ -47,6 +48,24 @@ type PendingMenuProvider = {
   menu_access_role: "chef" | "food_beverage_manager";
 };
 
+const measureMediaAspectRatio = (file: File) => new Promise<number | null>((resolve) => {
+  const objectUrl = URL.createObjectURL(file);
+  const media = file.type.startsWith("video") ? document.createElement("video") : new Image();
+  const finish = (ratio: number | null) => {
+    URL.revokeObjectURL(objectUrl);
+    resolve(ratio);
+  };
+
+  if (media instanceof HTMLVideoElement) {
+    media.preload = "metadata";
+    media.onloadedmetadata = () => finish(media.videoWidth / media.videoHeight || null);
+  } else {
+    media.onload = () => finish(media.naturalWidth / media.naturalHeight || null);
+  }
+  media.onerror = () => finish(null);
+  media.src = objectUrl;
+});
+
 const MenuManagementPage = () => {
   const { tenant, loading: tenantLoading } = useHotelTenant();
   const navigate = useNavigate();
@@ -57,6 +76,16 @@ const MenuManagementPage = () => {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [kitchenStatus, setKitchenStatus] = useState({
+    loadLevel: "",
+    preparationTimeMin: "",
+    preparationTimeMax: "",
+    stationsOperational: null as boolean | null,
+  });
+  const [kitchenStatusConfigured, setKitchenStatusConfigured] = useState(false);
+  const [kitchenStatusUpdatedAt, setKitchenStatusUpdatedAt] = useState<string | null>(null);
+  const [isSavingKitchenStatus, setIsSavingKitchenStatus] = useState(false);
+  const [kitchenStatusMessage, setKitchenStatusMessage] = useState("");
   const { uploadFile, isUploading } = useFileUpload();
 
   useEffect(() => {
@@ -91,12 +120,29 @@ const MenuManagementPage = () => {
         setPendingProviders((providers || []) as PendingMenuProvider[]);
       }
       if (canManage) {
-        const { data: databaseItems } = await supabase
-          .from("menu_items")
-          .select("*")
-          .eq("organization_id", tenant.organizationId)
-          .order("created_at", { ascending: true });
+        const [{ data: databaseItems }, { data: kitchenSettings }] = await Promise.all([
+          supabase
+            .from("menu_items")
+            .select("*")
+            .eq("organization_id", tenant.organizationId)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("menu_kitchen_status")
+            .select("load_level, preparation_time_min, preparation_time_max, stations_operational, updated_at")
+            .eq("organization_id", tenant.organizationId)
+            .maybeSingle(),
+        ]);
         setItems((databaseItems || []).map(menuItemFromDatabaseRow));
+        if (kitchenSettings) {
+          setKitchenStatus({
+            loadLevel: kitchenSettings.load_level,
+            preparationTimeMin: String(kitchenSettings.preparation_time_min),
+            preparationTimeMax: String(kitchenSettings.preparation_time_max),
+            stationsOperational: kitchenSettings.stations_operational,
+          });
+          setKitchenStatusConfigured(true);
+          setKitchenStatusUpdatedAt(kitchenSettings.updated_at);
+        }
       }
     };
 
@@ -119,19 +165,63 @@ const MenuManagementPage = () => {
 
   const handleMediaFile = async (file?: File) => {
     if (!file) return;
-    const uploaded = await uploadFile(file, "menu-items");
+    const [uploaded, mediaAspectRatio] = await Promise.all([
+      uploadFile(file, "menu-items"),
+      measureMediaAspectRatio(file),
+    ]);
     if (!uploaded) return;
     setForm((current) => ({
       ...current,
       mediaType: uploaded.fileType === "video" ? "video" : "image",
       mediaUrl: uploaded.publicUrl,
       mediaAttachmentId: uploaded.attachmentId,
+      mediaAspectRatio: mediaAspectRatio ? String(mediaAspectRatio) : "",
     }));
   };
 
   const resetForm = () => {
     setForm(emptyForm);
     setEditingId(null);
+  };
+
+  const saveKitchenStatus = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!tenant || isSavingKitchenStatus) return;
+
+    const preparationTimeMin = Number(kitchenStatus.preparationTimeMin);
+    const preparationTimeMax = Number(kitchenStatus.preparationTimeMax);
+    if (
+      !kitchenStatus.loadLevel
+      || !Number.isInteger(preparationTimeMin)
+      || !Number.isInteger(preparationTimeMax)
+      || preparationTimeMin < 0
+      || preparationTimeMax < preparationTimeMin
+      || kitchenStatus.stationsOperational === null
+    ) return;
+
+    setIsSavingKitchenStatus(true);
+    setKitchenStatusMessage("");
+    const { data: { user } } = await supabase.auth.getUser();
+    const updatedAt = new Date().toISOString();
+    const { error } = await supabase.from("menu_kitchen_status").upsert({
+      organization_id: tenant.organizationId,
+      load_level: kitchenStatus.loadLevel,
+      preparation_time_min: preparationTimeMin,
+      preparation_time_max: preparationTimeMax,
+      stations_operational: kitchenStatus.stationsOperational,
+      updated_by: user?.id || null,
+      updated_at: updatedAt,
+    }, { onConflict: "organization_id" });
+    setIsSavingKitchenStatus(false);
+
+    if (error) {
+      console.error("Unable to save hotel kitchen status", error);
+      setKitchenStatusMessage("Unable to save kitchen status. Confirm the database migration is applied.");
+      return;
+    }
+    setKitchenStatusConfigured(true);
+    setKitchenStatusUpdatedAt(updatedAt);
+    setKitchenStatusMessage("Kitchen status saved.");
   };
 
   const editItem = (item: MenuItem) => {
@@ -144,6 +234,7 @@ const MenuManagementPage = () => {
       mediaType: item.mediaType || "image",
       mediaUrl: item.mediaUrl || "",
       mediaAttachmentId: item.mediaAttachmentId || "",
+      mediaAspectRatio: item.mediaAspectRatio ? String(item.mediaAspectRatio) : "",
       price: String(item.price),
       originalPrice: String(item.originalPrice),
       category: item.category,
@@ -187,6 +278,7 @@ const MenuManagementPage = () => {
       mediaType: form.mediaUrl ? form.mediaType : undefined,
       mediaUrl: form.mediaUrl || undefined,
       mediaAttachmentId: form.mediaAttachmentId || undefined,
+      mediaAspectRatio: Number(form.mediaAspectRatio) || undefined,
       price,
       originalPrice: Math.max(price, originalPrice),
       category: form.category,
@@ -231,20 +323,27 @@ const MenuManagementPage = () => {
       media_type: nextItem.mediaType || null,
       media_url: nextItem.mediaUrl || null,
       media_attachment_id: nextItem.mediaAttachmentId || null,
+      media_aspect_ratio: nextItem.mediaAspectRatio || null,
       managed_by: (await supabase.auth.getUser()).data.user?.id,
       organization_id: tenant?.organizationId,
     };
 
-    const databaseQuery = nextItem.databaseId
+    const saveMenuItem = (payload: Record<string, unknown>) => nextItem.databaseId
       ? supabase
           .from("menu_items")
-          .update(databasePayload)
+          .update(payload)
           .eq("id", nextItem.databaseId)
           .eq("organization_id", tenant?.organizationId)
           .select()
           .single()
-      : supabase.from("menu_items").insert(databasePayload).select().single();
-    const { data: savedDatabaseItem, error: databaseError } = await databaseQuery;
+      : supabase.from("menu_items").insert(payload).select().single();
+    let { data: savedDatabaseItem, error: databaseError } = await saveMenuItem(databasePayload);
+    if (databaseError?.code === "PGRST204" || databaseError?.code === "42703") {
+      const payloadWithoutRatio = Object.fromEntries(
+        Object.entries(databasePayload).filter(([key]) => key !== "media_aspect_ratio"),
+      );
+      ({ data: savedDatabaseItem, error: databaseError } = await saveMenuItem(payloadWithoutRatio));
+    }
 
     if (databaseError || !savedDatabaseItem) {
       console.error("Unable to save menu item to Supabase", databaseError);
@@ -405,6 +504,73 @@ const MenuManagementPage = () => {
                 <div className="flex items-center gap-2"><Badge variant={item.approved ? "default" : "outline"}>{item.approved ? "Published" : "Hidden"}</Badge>{item.trending && <Badge className="bg-red-100 text-red-700">Trending</Badge>}<Button size="sm" variant="outline" onClick={() => editItem(item)}><Edit2 className="h-4 w-4 mr-1" /> Edit</Button><Button size="sm" variant="outline" onClick={() => toggleTrending(item.id)}>{item.trending ? "Remove Trending" : "Mark Trending"}</Button><Button size="sm" variant="outline" onClick={() => toggleVisibility(item.id)}>{item.approved ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}{item.approved ? "Hide" : "Publish"}</Button><Button size="sm" variant="ghost" className="text-destructive" onClick={() => removeItem(item.id)}><Trash2 className="h-4 w-4" /></Button></div>
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              Kitchen Status
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">Staff-maintained estimates; not automatically measured.</p>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <p className="font-medium">Current kitchen status</p>
+              {kitchenStatusConfigured ? (
+                <>
+                  <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+                    <div>
+                      <dt className="text-muted-foreground">Kitchen load</dt>
+                      <dd className="mt-1 font-semibold capitalize">{kitchenStatus.loadLevel}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">Estimated preparation</dt>
+                      <dd className="mt-1 font-semibold">{kitchenStatus.preparationTimeMin}–{kitchenStatus.preparationTimeMax} minutes</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">Kitchen stations</dt>
+                      <dd className="mt-1 font-semibold">{kitchenStatus.stationsOperational ? "All operational" : "Some unavailable"}</dd>
+                    </div>
+                  </dl>
+                  {kitchenStatusUpdatedAt && <p className="mt-3 text-xs text-muted-foreground">Last updated {new Date(kitchenStatusUpdatedAt).toLocaleString()}</p>}
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-muted-foreground">No kitchen status has been set for this hotel.</p>
+              )}
+            </div>
+            <form onSubmit={saveKitchenStatus} className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="kitchen-load">Kitchen load</Label>
+                <select id="kitchen-load" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={kitchenStatus.loadLevel} onChange={(event) => setKitchenStatus((current) => ({ ...current, loadLevel: event.target.value }))} required>
+                  <option value="">Select current load</option>
+                  <option value="light">Light</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="busy">Busy</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stations-operational">Kitchen stations</Label>
+                <select id="stations-operational" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={kitchenStatus.stationsOperational === null ? "" : String(kitchenStatus.stationsOperational)} onChange={(event) => setKitchenStatus((current) => ({ ...current, stationsOperational: event.target.value === "" ? null : event.target.value === "true" }))} required>
+                  <option value="">Select station status</option>
+                  <option value="true">All stations operational</option>
+                  <option value="false">Some stations unavailable</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="preparation-time-min">Preparation time (minutes)</Label>
+                <div className="flex items-center gap-2">
+                  <Input id="preparation-time-min" type="number" min="0" step="1" placeholder="Min" value={kitchenStatus.preparationTimeMin} onChange={(event) => setKitchenStatus((current) => ({ ...current, preparationTimeMin: event.target.value }))} required />
+                  <span>to</span>
+                  <Input aria-label="Maximum preparation time in minutes" type="number" min={kitchenStatus.preparationTimeMin || 0} step="1" placeholder="Max" value={kitchenStatus.preparationTimeMax} onChange={(event) => setKitchenStatus((current) => ({ ...current, preparationTimeMax: event.target.value }))} required />
+                </div>
+              </div>
+              <div className="flex flex-col justify-end gap-2">
+                <Button type="submit" disabled={isSavingKitchenStatus}>{isSavingKitchenStatus ? "Saving..." : kitchenStatusConfigured ? "Save Kitchen Status" : "Set Kitchen Status"}</Button>
+                <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{kitchenStatusMessage}</p>
+              </div>
+            </form>
           </CardContent>
         </Card>
       </div>

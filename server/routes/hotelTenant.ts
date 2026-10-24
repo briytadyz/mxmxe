@@ -18,6 +18,13 @@ type TenantRow = {
   accent_color: string | null;
 };
 
+type MenuItemRow = Record<string, unknown> & {
+  id: string;
+  media_type: string | null;
+  media_attachment_id: string | null;
+  media_aspect_ratio?: number | null;
+};
+
 const configuration = () => {
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -37,11 +44,53 @@ const serviceHeaders = (json = false) => {
   };
 };
 
-const hostnameFromRequest = (request: Request) => request.hostname.toLowerCase().replace(/\.$/, "");
+const hostnameFromRequest = (request: Request) => {
+  const hostname = request.hostname.toLowerCase().replace(/\.$/, "");
+  if (process.env.NODE_ENV !== "development") return hostname;
+
+  const forwardedHost = request.headers?.["x-forwarded-host"];
+  const forwardedHostname = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost)
+    ?.split(",")[0]
+    .trim()
+    .toLowerCase()
+    .replace(/:\d+$/, "")
+    .replace(/\.$/, "");
+  return forwardedHostname?.endsWith(".projects.builder.my") ? forwardedHostname : hostname;
+};
 
 export const resolveRequestHotelTenant = async (request: Request): Promise<ResolvedHotelTenant> => {
   const hostname = hostnameFromRequest(request);
   if (!hostname) throw new Error("Hotel domain is missing");
+
+  const previewOrganizationId = process.env.BUILDER_PREVIEW_TENANT_ORGANIZATION_ID;
+  const isBuilderPreviewHost = hostname.endsWith(".projects.builder.my")
+    || hostname === "localhost"
+    || hostname === "127.0.0.1"
+    || hostname === "::1";
+  if (process.env.NODE_ENV === "development" && isBuilderPreviewHost && previewOrganizationId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(previewOrganizationId)) {
+      throw new Error("Builder preview tenant configuration is invalid");
+    }
+    const previewTenants = await readService<Array<{
+      organization_id: string;
+      display_name: string;
+      logo_url: string | null;
+      primary_color: string | null;
+      accent_color: string | null;
+    }>>(
+      `hotel_tenant_settings?organization_id=eq.${encodeURIComponent(previewOrganizationId)}&is_active=eq.true&select=organization_id,display_name,logo_url,primary_color,accent_color&limit=1`,
+    );
+    const previewTenant = previewTenants[0];
+    if (!previewTenant) throw new Error("Builder preview hotel is not active");
+    return {
+      organizationId: previewTenant.organization_id,
+      domain: hostname,
+      name: previewTenant.display_name,
+      logoUrl: previewTenant.logo_url,
+      primaryColor: previewTenant.primary_color,
+      accentColor: previewTenant.accent_color,
+    };
+  }
 
   const { supabaseUrl } = configuration();
   const tenantResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/resolve_hotel_tenant`, {
@@ -75,6 +124,17 @@ const readService = async <T>(path: string): Promise<T> => {
   });
   if (!response.ok) throw new Error("Hotel information could not be loaded");
   return response.json() as Promise<T>;
+};
+
+const updateService = async (path: string, body: Record<string, unknown>) => {
+  const { supabaseUrl } = configuration();
+  const response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
+    method: "PATCH",
+    headers: { ...serviceHeaders(true), Prefer: "return=minimal" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error("Menu media information could not be saved");
 };
 
 const callTenantRpc = async <T>(name: string, args: Record<string, unknown>): Promise<T> => {
@@ -288,6 +348,46 @@ export const getHotelTenant: RequestHandler = async (request, response) => {
   }
 };
 
+export const getHotelRewards: RequestHandler = async (request, response) => {
+  setPrivateTenantResponse(response);
+  try {
+    const tenant = await resolveRequestHotelTenant(request);
+    const userId = await getAuthenticatedUserId(request.headers.authorization);
+    const rewards = await callTenantRpc("get_hotel_loyalty_program_for_tenant", {
+      target_organization_id: tenant.organizationId,
+      target_user_id: userId,
+    });
+    setPrivateTenantResponse(response);
+    response.json(rewards);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Hotel rewards could not be loaded";
+    response.status(message.includes("Authentication") || message.includes("session has expired") ? 401 : 503).json({ error: message });
+  }
+};
+
+export const updateHotelRewardsEnrollment: RequestHandler = async (request, response) => {
+  setPrivateTenantResponse(response);
+  try {
+    const tenant = await resolveRequestHotelTenant(request);
+    const userId = await getAuthenticatedUserId(request.headers.authorization);
+    const { enrolled } = request.body as { enrolled?: unknown };
+    if (typeof enrolled !== "boolean") {
+      response.status(400).json({ error: "Enrollment preference is invalid" });
+      return;
+    }
+    const result = await callTenantRpc<boolean>("set_hotel_loyalty_enrollment_for_tenant", {
+      target_organization_id: tenant.organizationId,
+      target_user_id: userId,
+      target_enrolled: enrolled,
+    });
+    setPrivateTenantResponse(response);
+    response.json({ enrolled: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Rewards preference could not be saved";
+    response.status(message.includes("Authentication") || message.includes("session has expired") ? 401 : 503).json({ error: message });
+  }
+};
+
 export const getPublicHotelBookingData: RequestHandler = async (request, response) => {
   try {
     const tenant = await resolveRequestHotelTenant(request);
@@ -309,12 +409,131 @@ export const getPublicMenuItems: RequestHandler = async (request, response) => {
   try {
     const tenant = await resolveRequestHotelTenant(request);
     const organizationId = encodeURIComponent(tenant.organizationId);
-    const select = "id,organization_id,name,short_description,full_description,currency,media_type,media_url,media_attachment_id,price,original_price,category,icon,preparation_time,availability,max_availability,dietary_tags,spice_level,origin,calories,chef_note,special_offer,status_labels,is_trending,is_published,created_at";
-    const items = await readService(`menu_items?organization_id=eq.${organizationId}&is_published=eq.true&select=${select}&order=created_at.asc`);
+    const select = "id,organization_id,name,short_description,full_description,currency,media_type,media_url,media_attachment_id,media_aspect_ratio,price,original_price,category,icon,preparation_time,availability,max_availability,dietary_tags,spice_level,origin,calories,chef_note,special_offer,status_labels,is_trending,is_published,created_at";
+    const legacySelect = select.replace(",media_aspect_ratio", "");
+    let items: MenuItemRow[];
+    try {
+      items = await readService<MenuItemRow[]>(`menu_items?organization_id=eq.${organizationId}&is_published=eq.true&select=${select}&order=created_at.asc`);
+    } catch {
+      items = await readService<MenuItemRow[]>(`menu_items?organization_id=eq.${organizationId}&is_published=eq.true&select=${legacySelect}&order=created_at.asc`);
+    }
+
     setPrivateTenantResponse(response);
     response.json({ tenant, items });
   } catch (error) {
     response.status(404).json({ error: error instanceof Error ? error.message : "Menu information could not be loaded" });
+  }
+};
+
+export const requestHotelMenuAvailability: RequestHandler = async (request, response) => {
+  try {
+    const tenant = await resolveRequestHotelTenant(request);
+    const userId = await getAuthenticatedUserId(request.headers.authorization);
+    const { menuItemId } = request.body as { menuItemId?: unknown };
+    if (!isUuid(menuItemId)) {
+      response.status(400).json({ error: "Select a valid menu item" });
+      return;
+    }
+
+    const subscribed = await callTenantRpc<boolean>("request_menu_item_availability_for_tenant", {
+      target_user_id: userId,
+      target_organization_id: tenant.organizationId,
+      target_menu_item_id: menuItemId,
+    });
+    setPrivateTenantResponse(response);
+    response.json({ subscribed });
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : "Availability request could not be saved" });
+  }
+};
+
+const muxAspectRatios = new Map<string, number>();
+
+const getMuxAspectRatio = async (playbackId: string): Promise<number | null> => {
+  const cachedRatio = muxAspectRatios.get(playbackId);
+  if (cachedRatio) return cachedRatio;
+
+  try {
+    const manifestResponse = await fetch(`https://stream.mux.com/${encodeURIComponent(playbackId)}.m3u8`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!manifestResponse.ok) return null;
+
+    const manifest = await manifestResponse.text();
+    const resolution = manifest.match(/RESOLUTION=(\d+)x(\d+)/);
+    if (!resolution) return null;
+
+    const aspectRatio = Number(resolution[1]) / Number(resolution[2]);
+    muxAspectRatios.set(playbackId, aspectRatio);
+    return aspectRatio;
+  } catch {
+    return null;
+  }
+};
+
+export const getPublicMenuVideo: RequestHandler = async (request, response) => {
+  try {
+    const { attachmentId } = request.params;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attachmentId)) {
+      response.status(400).json({ error: "Invalid menu media" });
+      return;
+    }
+
+    const tenant = await resolveRequestHotelTenant(request);
+    const organizationId = encodeURIComponent(tenant.organizationId);
+    const encodedAttachmentId = encodeURIComponent(attachmentId);
+    let menuItems: Array<{ id: string; media_aspect_ratio?: number | null }>;
+    try {
+      menuItems = await readService(
+        `menu_items?organization_id=eq.${organizationId}&media_attachment_id=eq.${encodedAttachmentId}&media_type=eq.video&is_published=eq.true&select=id,media_aspect_ratio&limit=1`,
+      );
+    } catch {
+      menuItems = await readService(
+        `menu_items?organization_id=eq.${organizationId}&media_attachment_id=eq.${encodedAttachmentId}&media_type=eq.video&is_published=eq.true&select=id&limit=1`,
+      );
+    }
+    if (menuItems.length === 0) {
+      response.status(404).json({ error: "Menu video was not found" });
+      return;
+    }
+
+    const attachments = await readService<Array<{ filename: string }>>(
+      `attachments?id=eq.${encodedAttachmentId}&select=filename&limit=1`,
+    );
+    if (attachments.length === 0) {
+      response.status(404).json({ error: "Menu video was not found" });
+      return;
+    }
+
+    const filename = encodeURIComponent(attachments[0].filename);
+    const videos = await readService<Array<{ playback_id: string | null; status: string }>>(
+      `video_uploads?filename=eq.${filename}&select=playback_id,status&limit=1`,
+    );
+    const video = videos[0];
+    const playbackId = video?.status === "ready" ? video.playback_id : null;
+    const menuItem = menuItems[0];
+    let aspectRatio = menuItem.media_aspect_ratio;
+    if (playbackId && !(aspectRatio && Number.isFinite(aspectRatio) && aspectRatio > 0)) {
+      aspectRatio = await getMuxAspectRatio(playbackId);
+      if (aspectRatio) {
+        try {
+          await updateService(
+            `menu_items?id=eq.${encodeURIComponent(menuItem.id)}&organization_id=eq.${organizationId}`,
+            { media_aspect_ratio: aspectRatio },
+          );
+        } catch {
+          // The menu media migration may not have been applied yet.
+        }
+      }
+    }
+    setPrivateTenantResponse(response);
+    response.json({
+      status: video?.status || "pending",
+      playbackId,
+      aspectRatio,
+    });
+  } catch (error) {
+    response.status(404).json({ error: error instanceof Error ? error.message : "Menu video could not be loaded" });
   }
 };
 

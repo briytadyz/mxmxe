@@ -27,10 +27,15 @@ const serviceHeaders$2 = (json = false) => {
     ...json ? { "content-type": "application/json" } : {}
   };
 };
-const hostnameFromRequest = (request) => request.hostname.toLowerCase().replace(/\.$/, "");
+const hostnameFromRequest = (request) => {
+  const hostname = request.hostname.toLowerCase().replace(/\.$/, "");
+  return hostname;
+};
 const resolveRequestHotelTenant = async (request) => {
   const hostname = hostnameFromRequest(request);
   if (!hostname) throw new Error("Hotel domain is missing");
+  process.env.BUILDER_PREVIEW_TENANT_ORGANIZATION_ID;
+  hostname.endsWith(".projects.builder.my") || hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
   const { supabaseUrl } = configuration$2();
   const tenantResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/resolve_hotel_tenant`, {
     method: "POST",
@@ -60,6 +65,16 @@ const readService$2 = async (path2) => {
   });
   if (!response.ok) throw new Error("Hotel information could not be loaded");
   return response.json();
+};
+const updateService = async (path2, body) => {
+  const { supabaseUrl } = configuration$2();
+  const response = await fetch(`${supabaseUrl}/rest/v1/${path2}`, {
+    method: "PATCH",
+    headers: { ...serviceHeaders$2(true), Prefer: "return=minimal" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(1e4)
+  });
+  if (!response.ok) throw new Error("Menu media information could not be saved");
 };
 const callTenantRpc = async (name, args) => {
   const { supabaseUrl } = configuration$2();
@@ -253,6 +268,44 @@ const getHotelTenant = async (request, response) => {
     response.status(404).json({ error: error instanceof Error ? error.message : "This hotel domain is not configured" });
   }
 };
+const getHotelRewards = async (request, response) => {
+  setPrivateTenantResponse(response);
+  try {
+    const tenant = await resolveRequestHotelTenant(request);
+    const userId = await getAuthenticatedUserId$2(request.headers.authorization);
+    const rewards = await callTenantRpc("get_hotel_loyalty_program_for_tenant", {
+      target_organization_id: tenant.organizationId,
+      target_user_id: userId
+    });
+    setPrivateTenantResponse(response);
+    response.json(rewards);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Hotel rewards could not be loaded";
+    response.status(message.includes("Authentication") || message.includes("session has expired") ? 401 : 503).json({ error: message });
+  }
+};
+const updateHotelRewardsEnrollment = async (request, response) => {
+  setPrivateTenantResponse(response);
+  try {
+    const tenant = await resolveRequestHotelTenant(request);
+    const userId = await getAuthenticatedUserId$2(request.headers.authorization);
+    const { enrolled } = request.body;
+    if (typeof enrolled !== "boolean") {
+      response.status(400).json({ error: "Enrollment preference is invalid" });
+      return;
+    }
+    const result = await callTenantRpc("set_hotel_loyalty_enrollment_for_tenant", {
+      target_organization_id: tenant.organizationId,
+      target_user_id: userId,
+      target_enrolled: enrolled
+    });
+    setPrivateTenantResponse(response);
+    response.json({ enrolled: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Rewards preference could not be saved";
+    response.status(message.includes("Authentication") || message.includes("session has expired") ? 401 : 503).json({ error: message });
+  }
+};
 const getPublicHotelBookingData = async (request, response) => {
   try {
     const tenant = await resolveRequestHotelTenant(request);
@@ -273,12 +326,118 @@ const getPublicMenuItems = async (request, response) => {
   try {
     const tenant = await resolveRequestHotelTenant(request);
     const organizationId = encodeURIComponent(tenant.organizationId);
-    const select = "id,organization_id,name,short_description,full_description,currency,media_type,media_url,media_attachment_id,price,original_price,category,icon,preparation_time,availability,max_availability,dietary_tags,spice_level,origin,calories,chef_note,special_offer,status_labels,is_trending,is_published,created_at";
-    const items = await readService$2(`menu_items?organization_id=eq.${organizationId}&is_published=eq.true&select=${select}&order=created_at.asc`);
+    const select = "id,organization_id,name,short_description,full_description,currency,media_type,media_url,media_attachment_id,media_aspect_ratio,price,original_price,category,icon,preparation_time,availability,max_availability,dietary_tags,spice_level,origin,calories,chef_note,special_offer,status_labels,is_trending,is_published,created_at";
+    const legacySelect = select.replace(",media_aspect_ratio", "");
+    let items;
+    try {
+      items = await readService$2(`menu_items?organization_id=eq.${organizationId}&is_published=eq.true&select=${select}&order=created_at.asc`);
+    } catch {
+      items = await readService$2(`menu_items?organization_id=eq.${organizationId}&is_published=eq.true&select=${legacySelect}&order=created_at.asc`);
+    }
     setPrivateTenantResponse(response);
     response.json({ tenant, items });
   } catch (error) {
     response.status(404).json({ error: error instanceof Error ? error.message : "Menu information could not be loaded" });
+  }
+};
+const requestHotelMenuAvailability = async (request, response) => {
+  try {
+    const tenant = await resolveRequestHotelTenant(request);
+    const userId = await getAuthenticatedUserId$2(request.headers.authorization);
+    const { menuItemId } = request.body;
+    if (!isUuid$1(menuItemId)) {
+      response.status(400).json({ error: "Select a valid menu item" });
+      return;
+    }
+    const subscribed = await callTenantRpc("request_menu_item_availability_for_tenant", {
+      target_user_id: userId,
+      target_organization_id: tenant.organizationId,
+      target_menu_item_id: menuItemId
+    });
+    setPrivateTenantResponse(response);
+    response.json({ subscribed });
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : "Availability request could not be saved" });
+  }
+};
+const muxAspectRatios = /* @__PURE__ */ new Map();
+const getMuxAspectRatio = async (playbackId) => {
+  const cachedRatio = muxAspectRatios.get(playbackId);
+  if (cachedRatio) return cachedRatio;
+  try {
+    const manifestResponse = await fetch(`https://stream.mux.com/${encodeURIComponent(playbackId)}.m3u8`, {
+      signal: AbortSignal.timeout(5e3)
+    });
+    if (!manifestResponse.ok) return null;
+    const manifest = await manifestResponse.text();
+    const resolution = manifest.match(/RESOLUTION=(\d+)x(\d+)/);
+    if (!resolution) return null;
+    const aspectRatio = Number(resolution[1]) / Number(resolution[2]);
+    muxAspectRatios.set(playbackId, aspectRatio);
+    return aspectRatio;
+  } catch {
+    return null;
+  }
+};
+const getPublicMenuVideo = async (request, response) => {
+  try {
+    const { attachmentId } = request.params;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attachmentId)) {
+      response.status(400).json({ error: "Invalid menu media" });
+      return;
+    }
+    const tenant = await resolveRequestHotelTenant(request);
+    const organizationId = encodeURIComponent(tenant.organizationId);
+    const encodedAttachmentId = encodeURIComponent(attachmentId);
+    let menuItems;
+    try {
+      menuItems = await readService$2(
+        `menu_items?organization_id=eq.${organizationId}&media_attachment_id=eq.${encodedAttachmentId}&media_type=eq.video&is_published=eq.true&select=id,media_aspect_ratio&limit=1`
+      );
+    } catch {
+      menuItems = await readService$2(
+        `menu_items?organization_id=eq.${organizationId}&media_attachment_id=eq.${encodedAttachmentId}&media_type=eq.video&is_published=eq.true&select=id&limit=1`
+      );
+    }
+    if (menuItems.length === 0) {
+      response.status(404).json({ error: "Menu video was not found" });
+      return;
+    }
+    const attachments = await readService$2(
+      `attachments?id=eq.${encodedAttachmentId}&select=filename&limit=1`
+    );
+    if (attachments.length === 0) {
+      response.status(404).json({ error: "Menu video was not found" });
+      return;
+    }
+    const filename = encodeURIComponent(attachments[0].filename);
+    const videos = await readService$2(
+      `video_uploads?filename=eq.${filename}&select=playback_id,status&limit=1`
+    );
+    const video = videos[0];
+    const playbackId = video?.status === "ready" ? video.playback_id : null;
+    const menuItem = menuItems[0];
+    let aspectRatio = menuItem.media_aspect_ratio;
+    if (playbackId && !(aspectRatio && Number.isFinite(aspectRatio) && aspectRatio > 0)) {
+      aspectRatio = await getMuxAspectRatio(playbackId);
+      if (aspectRatio) {
+        try {
+          await updateService(
+            `menu_items?id=eq.${encodeURIComponent(menuItem.id)}&organization_id=eq.${organizationId}`,
+            { media_aspect_ratio: aspectRatio }
+          );
+        } catch {
+        }
+      }
+    }
+    setPrivateTenantResponse(response);
+    response.json({
+      status: video?.status || "pending",
+      playbackId,
+      aspectRatio
+    });
+  } catch (error) {
+    response.status(404).json({ error: error instanceof Error ? error.message : "Menu video could not be loaded" });
   }
 };
 const getPublicSpecialEvents = async (request, response) => {
@@ -1767,9 +1926,13 @@ function createServer() {
   app2.post("/api/platform/hotels/verify-domain", verifyPlatformHotelDomain);
   app2.post("/api/platform/hotels/activate", activatePlatformHotel);
   app2.get("/api/hotel-tenant", getHotelTenant);
+  app2.get("/api/hotel-rewards", getHotelRewards);
+  app2.post("/api/hotel-rewards/enrollment", updateHotelRewardsEnrollment);
   app2.post("/api/hotel-complaints", submitHotelComplaint);
   app2.get("/api/hotel-booking-data", getPublicHotelBookingData);
   app2.get("/api/hotel-menu-items", getPublicMenuItems);
+  app2.get("/api/hotel-menu-video/:attachmentId", getPublicMenuVideo);
+  app2.post("/api/hotel-menu-availability", requestHotelMenuAvailability);
   app2.get("/api/hotel-events", getPublicSpecialEvents);
   app2.post("/api/hotel-event-proposals/submit", submitHotelEventProposal);
   app2.post("/api/hotel-event-proposals/review", reviewHotelEventProposal);

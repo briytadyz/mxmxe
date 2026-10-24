@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import CheckoutPage from "../components/checkout/CheckoutPage";
+import MuxVideoPlayer from "../components/MuxVideoPlayer";
 import { menuItemFromDatabaseRow, MenuItem } from "../lib/menuData";
 import { supabase } from "../lib/supabase";
-import { clearPendingCheckout, getPendingCheckout, type ResumableMenuOrder } from "../lib/flutterwave";
+import { clearPendingCheckout, type ResumableMenuOrder } from "../lib/flutterwave";
 import { loadActiveMenuCart, syncActiveMenuCart } from "../lib/menuCart";
 import { useHotelTenant } from "../lib/hotelTenant";
 import {
@@ -16,12 +18,6 @@ import {
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../components/ui/tabs";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -29,7 +25,6 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { Separator } from "../components/ui/separator";
-import { Progress } from "../components/ui/progress";
 import {
   Crown,
   QrCode,
@@ -55,39 +50,92 @@ import {
   Users,
   ChefHat,
   Globe,
-  Zap,
   Bell,
-  CheckCircle,
   Gift,
 } from "lucide-react";
 
+const MenuSpecialOffer = () => {
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const hour = currentTime.getHours();
+  const offer = hour >= 11 && hour < 15
+    ? {
+        title: "Lunch Special",
+        description: "Order now and skip the queue - you come first!",
+        emoji: "🍽️",
+        endsAt: new Date(currentTime.getTime() + (15 - hour) * 60 * 60 * 1000 - currentTime.getMinutes() * 60 * 1000),
+      }
+    : hour >= 17 && hour < 23
+      ? {
+          title: "Evening Delight",
+          description: "Live jazz band + special cocktail prices",
+          emoji: "🎷",
+          endsAt: new Date(currentTime.getTime() + (23 - hour) * 60 * 60 * 1000 - currentTime.getMinutes() * 60 * 1000),
+        }
+      : null;
+
+  if (!offer) return null;
+
+  const remainingTime = offer.endsAt.getTime() - currentTime.getTime();
+
+  return (
+    <Card className="mb-8 border-sheraton-gold bg-gradient-to-r from-sheraton-gold/10 to-sheraton-gold/5">
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="text-4xl">{offer.emoji}</div>
+            <div>
+              <h3 className="text-xl font-bold text-sheraton-navy">{offer.title}</h3>
+              <p className="text-muted-foreground">{offer.description}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm text-muted-foreground">Ends in:</div>
+            <div className="text-2xl font-bold text-sheraton-gold">
+              {Math.floor(remainingTime / (1000 * 60 * 60))}h {Math.floor((remainingTime % (1000 * 60 * 60)) / (1000 * 60))}m
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 const MenuPage = () => {
   const { tenant } = useHotelTenant();
+  const navigate = useNavigate();
+  const [availabilitySubscriptions, setAvailabilitySubscriptions] = useState<Set<string>>(new Set());
+  const [subscribingItemId, setSubscribingItemId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [cart, setCart] = useState<{ [key: string]: number }>({});
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [activeTab, setActiveTab] = useState("food");
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() => typeof window !== "undefined" && window.innerWidth >= 768);
+  const [mediaAspectRatios, setMediaAspectRatios] = useState<Record<string, number>>({});
   const [showCheckoutPage, setShowCheckoutPage] = useState(false);
   const [resumableOrder, setResumableOrder] = useState<ResumableMenuOrder | undefined>();
+  const [resumeCart, setResumeCart] = useState<Record<string, number> | null>(null);
   const [durableCartId, setDurableCartId] = useState<string | null>(null);
   const [cartReady, setCartReady] = useState(false);
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    const updateViewport = () => setIsDesktopViewport(window.innerWidth >= 768);
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
   }, []);
 
   useEffect(() => {
     if (!tenant) return;
-    const pendingCheckout = getPendingCheckout();
-    if (pendingCheckout?.organizationId === tenant.organizationId) {
-      setCart(pendingCheckout.cart);
-      setShowCheckoutPage(true);
-      setCartReady(true);
-      return;
-    }
-    if (pendingCheckout) clearPendingCheckout();
+    setCartReady(false);
+    setCart({});
+    setDurableCartId(null);
+    setResumableOrder(undefined);
+    setResumeCart(null);
+    clearPendingCheckout();
 
     loadActiveMenuCart(tenant.organizationId)
       .then((savedCart) => {
@@ -103,7 +151,7 @@ const MenuPage = () => {
     let active = true;
 
     const restoreUnpaidOrder = async () => {
-      if (!tenant || getPendingCheckout()?.organizationId === tenant.organizationId) return;
+      if (!tenant) return;
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -152,9 +200,7 @@ const MenuPage = () => {
         },
       };
 
-      setCart(restoredCart);
       setResumableOrder(restoredOrder);
-      setShowCheckoutPage(true);
     };
 
     restoreUnpaidOrder().catch((error) => console.error("Unable to restore unpaid menu order", error));
@@ -210,6 +256,65 @@ const MenuPage = () => {
       .finally(() => { if (active) setMenuItemsReady(true); });
     return () => { active = false; };
   }, [tenant?.organizationId]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadAvailabilitySubscriptions = async () => {
+      if (!tenant) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("menu_availability_subscriptions")
+        .select("menu_item_id")
+        .eq("user_id", user.id)
+        .eq("organization_id", tenant.organizationId);
+      if (error) throw error;
+      if (active) setAvailabilitySubscriptions(new Set((data || []).map((row) => row.menu_item_id)));
+    };
+
+    loadAvailabilitySubscriptions().catch((error) => console.error("Unable to load menu availability requests", error));
+    return () => { active = false; };
+  }, [tenant?.organizationId]);
+
+  const requestMenuAvailability = async (item: MenuItem) => {
+    const itemId = item.databaseId;
+    if (!itemId) return;
+
+    setSubscribingItemId(itemId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast("Sign in to get a restock notification", {
+          action: { label: "Sign in", onClick: () => navigate("/login?returnTo=%2Fmenu") },
+        });
+        return;
+      }
+
+      const response = await fetch("/api/hotel-menu-availability", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ menuItemId: itemId }),
+      });
+      const result = await response.json().catch(() => null) as { subscribed?: boolean } | null;
+      if (!response.ok || !result) throw new Error("Unable to save availability request");
+      if (!result.subscribed) {
+        toast.message("This dish is available now. Refresh the menu to order it.");
+        return;
+      }
+
+      setAvailabilitySubscriptions((current) => new Set(current).add(itemId));
+      toast.success("We’ll notify you when this dish is back.");
+    } catch {
+      toast.error("We couldn’t save your restock request. Please try again.");
+    } finally {
+      setSubscribingItemId(null);
+    }
+  };
 
   const filteredItems = menuItems.filter((item) => {
     const matchesSearch =
@@ -297,53 +402,23 @@ const MenuPage = () => {
   const formatPrice = (amount: number, currency = "USD") =>
     new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
 
-  const getCurrentOffer = () => {
-    const hour = currentTime.getHours();
-    if (hour >= 11 && hour < 15) {
-      return {
-        title: "Lunch Special",
-        description: "Order now and skip the queue - you come first!",
-        emoji: "🍽️",
-        countdown: new Date(
-          currentTime.getTime() +
-            (15 - hour) * 60 * 60 * 1000 -
-            currentTime.getMinutes() * 60 * 1000,
-        ),
-      };
-    } else if (hour >= 17 && hour < 23) {
-      return {
-        title: "Evening Delight",
-        description: "Live jazz band + special cocktail prices",
-        emoji: "🎷",
-        countdown: new Date(
-          currentTime.getTime() +
-            (23 - hour) * 60 * 60 * 1000 -
-            currentTime.getMinutes() * 60 * 1000,
-        ),
-      };
-    }
-    return null;
-  };
-
-  const currentOffer = getCurrentOffer();
-
   if (showCheckoutPage) {
     return (
       <CheckoutPage
-        onBack={() => setShowCheckoutPage(false)}
-        cart={cart}
+        onBack={() => { setShowCheckoutPage(false); setResumeCart(null); }}
+        cart={resumeCart || cart}
         menuItems={menuItems}
-        onUpdateCart={updateCart}
-        onRemoveFromCart={removeFromCartCompletely}
-        resumableOrder={resumableOrder}
-        durableCartId={durableCartId}
+        onUpdateCart={resumeCart ? (itemId, quantity) => setResumeCart((current) => ({ ...(current || {}), [itemId]: quantity })) : updateCart}
+        onRemoveFromCart={resumeCart ? (itemId) => setResumeCart((current) => { const next = { ...(current || {}) }; delete next[itemId]; return next; }) : removeFromCartCompletely}
+        resumableOrder={resumeCart ? resumableOrder : undefined}
+        durableCartId={resumeCart ? null : durableCartId}
       />
     );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sheraton-cream to-background">
-      <div className="container py-8 pb-24 md:pb-8">
+      <div className="container mx-auto px-4 py-8 pb-24 md:px-8 md:pb-8">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
@@ -369,44 +444,32 @@ const MenuPage = () => {
           </div>
         </div>
 
-        {/* Current Special Offer */}
-        {currentOffer && (
-          <Card className="mb-8 border-sheraton-gold bg-gradient-to-r from-sheraton-gold/10 to-sheraton-gold/5">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="text-4xl">{currentOffer.emoji}</div>
-                  <div>
-                    <h3 className="text-xl font-bold text-sheraton-navy">
-                      {currentOffer.title}
-                    </h3>
-                    <p className="text-muted-foreground">
-                      {currentOffer.description}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm text-muted-foreground">Ends in:</div>
-                  <div className="text-2xl font-bold text-sheraton-gold">
-                    {Math.floor(
-                      (currentOffer.countdown.getTime() -
-                        currentTime.getTime()) /
-                        (1000 * 60 * 60),
-                    )}
-                    h{" "}
-                    {Math.floor(
-                      ((currentOffer.countdown.getTime() -
-                        currentTime.getTime()) %
-                        (1000 * 60 * 60)) /
-                        (1000 * 60),
-                    )}
-                    m
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <MenuSpecialOffer />
+
+        {resumableOrder && <Card className="mb-6 border-sheraton-gold/40 bg-sheraton-gold/5"><CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold text-sheraton-navy">Unfinished order {resumableOrder.orderNumber}</p><p className="text-sm text-muted-foreground">Your menu is ready to browse. Resume payment whenever you’re ready.</p></div><Button className="sheraton-gradient text-white" onClick={() => { setResumeCart(resumableOrder.cart); setShowCheckoutPage(true); }}>Resume Order</Button></CardContent></Card>}
+
+        <section aria-labelledby="menu-categories-heading" className="mb-8 lg:hidden">
+          <h2 id="menu-categories-heading" className="mb-4 flex items-center justify-center gap-2 text-lg font-semibold text-sheraton-navy">
+            <Filter className="h-5 w-5 text-sheraton-gold" />
+            Categories
+          </h2>
+          <div role="group" aria-label="Menu categories" className="flex flex-wrap justify-center gap-2">
+            {categories.map((category) => (
+              <Button
+                key={category.id}
+                variant={selectedCategory === category.id ? "default" : "outline"}
+                aria-pressed={selectedCategory === category.id}
+                className={`flex items-center gap-2 ${
+                  selectedCategory === category.id ? "bg-sheraton-gold text-sheraton-navy hover:bg-sheraton-gold" : ""
+                }`}
+                onClick={() => setSelectedCategory(category.id)}
+              >
+                <category.icon className="h-4 w-4" />
+                <span>{category.name}</span>
+              </Button>
+            ))}
+          </div>
+        </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Filters and Categories */}
@@ -429,25 +492,21 @@ const MenuPage = () => {
               </CardContent>
             </Card>
 
-            {/* Categories */}
-            <Card>
+            <Card className="hidden lg:block">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Filter className="h-5 w-5 text-sheraton-gold" />
                   Categories
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="flex gap-2 overflow-x-auto pb-2 md:flex-col md:overflow-visible md:pb-0">
                 {categories.map((category) => (
                   <Button
                     key={category.id}
-                    variant={
-                      selectedCategory === category.id ? "default" : "ghost"
-                    }
-                    className={`w-full justify-start gap-2 ${
-                      selectedCategory === category.id
-                        ? "sheraton-gradient text-white"
-                        : ""
+                    variant={selectedCategory === category.id ? "default" : "ghost"}
+                    aria-pressed={selectedCategory === category.id}
+                    className={`w-auto shrink-0 justify-start gap-2 md:w-full ${
+                      selectedCategory === category.id ? "sheraton-gradient text-white" : ""
                     }`}
                     onClick={() => setSelectedCategory(category.id)}
                   >
@@ -458,40 +517,48 @@ const MenuPage = () => {
               </CardContent>
             </Card>
 
-            {/* Live Kitchen Status */}
-            <Card className="border-green-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-green-600">
-                  <Zap className="h-5 w-5" />
-                  Live Kitchen Status
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span>Kitchen Load</span>
-                  <span className="text-green-600">Light</span>
-                </div>
-                <Progress value={35} className="h-2" />
-                <div className="text-xs text-muted-foreground">
-                  ⚡ Fast service: Orders ready in 15-25 min
-                </div>
-                <div className="flex items-center gap-2 text-xs text-green-600">
-                  <CheckCircle className="h-3 w-3" />
-                  <span>All stations operational</span>
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
           {/* Menu Items */}
           <div className="lg:col-span-3">
-            <div className="grid grid-cols-1 gap-6">
-              {filteredItems.map((item) => {
+            {filteredItems.length === 0 ? (
+              menuItemsReady ? (
+                <Card className="border-dashed bg-card/80">
+                  <CardContent className="flex min-h-56 flex-col items-center justify-center px-6 py-10 text-center">
+                    <Utensils className="mb-4 h-8 w-8 text-sheraton-gold" aria-hidden="true" />
+                    <h2 className="text-lg font-semibold">
+                      {menuItems.length === 0 ? "Menu coming soon" : "No dishes match your search"}
+                    </h2>
+                    <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                      {menuItems.length === 0
+                        ? "Our team is preparing the menu. Please check back shortly."
+                        : "Try another search or clear your filters to see more dishes."}
+                    </p>
+                    {menuItems.length > 0 && (
+                      <Button
+                        variant="outline"
+                        className="mt-4"
+                        onClick={() => { setSearchTerm(""); setSelectedCategory("all"); }}
+                      >
+                        Clear filters
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : null
+            ) : (
+              <div className="grid grid-cols-1 gap-6">
+                {filteredItems.map((item) => {
                 const availability = getAvailabilityStatus(item);
                 const cartQuantity = cart[item.id] || 0;
                 const discountPercent = item.originalPrice > item.price
                   ? Math.round((1 - item.price / item.originalPrice) * 100)
                   : 0;
+                const isVideoItem = item.mediaType === "video" && Boolean(item.mediaUrl);
+                const mediaAspectRatio = item.mediaAspectRatio ?? mediaAspectRatios[item.id];
+                const isPortraitMedia = mediaAspectRatio !== undefined && mediaAspectRatio < 1;
+                const isDesktopPortraitMedia = Boolean(item.mediaUrl) && isDesktopViewport && isPortraitMedia;
+                const isMobilePortraitVideo = isVideoItem && !isDesktopViewport && isPortraitMedia;
                 const customStatuses = item.statuses || [];
                 const statusLabels = availability.status === "out"
                   ? ["Sold out", ...customStatuses.filter((status) => status.toLowerCase() !== "available" && status.toLowerCase() !== "sold out")]
@@ -504,18 +571,113 @@ const MenuPage = () => {
                       availability.status === "out" ? "opacity-80" : ""
                     }`}
                   >
-                    <CardContent className="p-0">
-                      <div className="flex flex-col md:flex-row">
+                    <CardContent className={`p-0 ${isDesktopPortraitMedia ? "md:grid md:grid-cols-[minmax(210px,0.75fr)_minmax(0,1.65fr)] md:items-stretch" : ""}`}>
+                      {item.mediaUrl && (
+                        item.mediaType === "video" ? (
+                          <div className={isDesktopPortraitMedia ? "min-w-0" : "w-full"}>
+                            <MuxVideoPlayer
+                              key={`${item.id}-${item.mediaAttachmentId}`}
+                              attachmentId={item.mediaAttachmentId}
+                              initialPlaybackId={item.mediaPlaybackId}
+                              initialAspectRatio={item.mediaAspectRatio}
+                              initialVideoStatus={item.mediaVideoStatus}
+                              controlsMode="minimal"
+                              presentation="immersive"
+                              overlayOnlyOnMobilePortrait
+                              onAspectRatioChange={(ratio) => {
+                                if (item.mediaAspectRatio === ratio) return;
+                                setMediaAspectRatios((current) => current[item.id] === ratio ? current : { ...current, [item.id]: ratio });
+                              }}
+                              overlay={(
+                                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/95 via-black/70 to-transparent px-4 pb-4 pt-20 text-white sm:px-6 sm:pb-5">
+                                  <div className="pointer-events-auto flex items-end justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                      <h3 className="truncate text-lg font-semibold drop-shadow-sm sm:text-xl">{item.name}</h3>
+                                      {item.special_offer && (
+                                        <p className="mt-0.5 truncate text-sm font-medium text-white/90">{item.special_offer}</p>
+                                      )}
+                                      <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                        <span className="text-xl font-bold">{formatPrice(item.price, item.currency)}</span>
+                                        {discountPercent > 0 && (
+                                          <>
+                                            <span className="text-sm text-white/80 line-through">{formatPrice(item.originalPrice, item.currency)}</span>
+                                            <span className="text-sm font-semibold text-amber-200">{discountPercent}% off</span>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {cartQuantity > 0 ? (
+                                      <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 rounded-full bg-white/15 p-1 backdrop-blur-sm">
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          aria-label={`Remove one ${item.name} from order`}
+                                          className="h-9 w-9 text-white hover:bg-white/20 hover:text-white"
+                                          onClick={() => removeFromCart(item.id)}
+                                        >
+                                          <Minus className="h-4 w-4" />
+                                        </Button>
+                                        <span className="min-w-5 text-center text-sm font-semibold" aria-label={`${cartQuantity} in order`}>{cartQuantity}</span>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          aria-label={`Add one ${item.name} to order`}
+                                          className="h-9 w-9 text-white hover:bg-white/20 hover:text-white"
+                                          onClick={() => addToCart(item.id)}
+                                          disabled={item.availability === 0}
+                                        >
+                                          <Plus className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    ) : item.availability > 0 ? (
+                                      <Button
+                                        onClick={() => addToCart(item.id)}
+                                        className="pointer-events-auto h-10 shrink-0 rounded-full bg-sheraton-gold px-4 text-sheraton-navy shadow-lg hover:bg-sheraton-gold/90"
+                                      >
+                                        <Plus className="mr-1.5 h-4 w-4" />
+                                        <span className="hidden sm:inline">Add to order</span>
+                                        <span className="sm:hidden">Add</span>
+                                      </Button>
+                                    ) : (
+                                      <span className="shrink-0 rounded-full bg-black/45 px-3 py-2 text-xs font-medium text-white/90">Sold out</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            />
+                          </div>
+                        ) : (
+                          <img
+                            src={item.mediaUrl}
+                            alt={`${item.name} dish`}
+                            loading="lazy"
+                            onLoad={(event) => {
+                              if (item.mediaAspectRatio) return;
+                              const image = event.currentTarget;
+                              if (!image.naturalWidth || !image.naturalHeight) return;
+                              const ratio = image.naturalWidth / image.naturalHeight;
+                              setMediaAspectRatios((current) => current[item.id] === ratio ? current : { ...current, [item.id]: ratio });
+                            }}
+                            style={mediaAspectRatio && (isDesktopPortraitMedia || !isPortraitMedia) ? { aspectRatio: mediaAspectRatio, maxHeight: "68svh" } : undefined}
+                            className={mediaAspectRatio === undefined || isDesktopPortraitMedia || !isPortraitMedia
+                              ? "max-h-[68svh] w-full bg-black/5 object-contain"
+                              : "max-h-96 w-full aspect-[4/3] object-cover sm:aspect-[16/9]"}
+                          />
+                        )
+                      )}
+                      <div className={`flex min-w-0 flex-col md:flex-row ${isDesktopPortraitMedia ? "md:col-start-2" : ""}`}>
                         {/* Item Image and Basic Info */}
-                        <div className="min-w-0 flex-1 p-4 md:p-6">
+                        <div className="min-w-0 flex-1 p-4 md:p-6 md:flex md:flex-col md:justify-between">
                           <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                             <div className="flex min-w-0 items-start gap-3 md:items-center md:gap-4">
-                              <div className="shrink-0 text-4xl md:text-5xl" aria-hidden="true">{item.image}</div>
+                              {!isVideoItem && !isDesktopPortraitMedia && <div className="shrink-0 text-4xl md:text-5xl" aria-hidden="true">{item.image}</div>}
                               <div className="min-w-0">
                                 <div className="mb-1 flex flex-wrap items-start gap-2">
-                                  <h3 className="break-words text-lg font-bold text-sheraton-navy md:text-xl">
-                                    {item.name}
-                                  </h3>
+                                  {(!isVideoItem || !isMobilePortraitVideo) && (
+                                    <h3 className="break-words text-lg font-bold text-sheraton-navy md:text-xl">
+                                      {item.name}
+                                    </h3>
+                                  )}
                                   <div className="flex flex-wrap items-center gap-1.5" aria-label={`${item.name} status`}>
                                     {statusLabels.map((status) => (
                                       <Badge
@@ -529,7 +691,7 @@ const MenuPage = () => {
                                     {item.trending && (
                                       <Badge
                                         variant="secondary"
-                                        className="bg-red-100 text-red-600"
+                                        className="border-transparent bg-destructive/10 text-destructive"
                                       >
                                         <TrendingUp className="h-3 w-3 mr-1" />
                                         Trending
@@ -564,7 +726,7 @@ const MenuPage = () => {
                             </div>
 
                             {/* Price and Availability */}
-                            <div className="w-full text-left md:w-auto md:text-right">
+                            {(!isVideoItem || !isMobilePortraitVideo) && <div className="w-full text-left md:w-auto md:text-right">
                               <div className="mb-2 flex flex-wrap items-center gap-2">
                                 {discountPercent > 0 && (
                                   <span className="text-sm text-muted-foreground line-through" aria-label={`Original price ${formatPrice(item.originalPrice, item.currency)}`}>
@@ -575,7 +737,7 @@ const MenuPage = () => {
                                   {formatPrice(item.price, item.currency)}
                                 </span>
                                 {discountPercent > 0 && (
-                                  <Badge className="bg-red-100 text-red-700">
+                                  <Badge className="border-transparent bg-destructive/10 text-destructive">
                                     {discountPercent}% off
                                   </Badge>
                                 )}
@@ -591,42 +753,23 @@ const MenuPage = () => {
                                   {item.availability} left
                                 </div>
                               )}
-                            </div>
+                            </div>}
                           </div>
 
                           {/* Detailed Information */}
-                          <div className="mb-4 rounded-lg bg-gray-50 p-3 md:p-4">
-                            <p className="mb-2 break-words text-sm text-gray-700">
-                              {item.description_full}
-                            </p>
-                            {item.chef_note && (
-                              <div className="flex items-center gap-2 text-xs text-sheraton-gold">
-                                <ChefHat className="h-3 w-3" />
-                                <span className="break-words italic">{item.chef_note}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Dish media */}
-                          {item.mediaUrl && (
-                            <div className="mb-4 flex flex-col items-center gap-2 rounded-lg border border-border/60 bg-white p-3">
-                              {item.mediaType === "video" ? (
-                                <video
-                                  src={item.mediaUrl}
-                                  controls
-                                  className="aspect-video max-h-56 w-full max-w-xl rounded-md object-contain md:aspect-auto md:max-h-64"
-                                  aria-label={`${item.name} video`}
-                                />
-                              ) : (
-                                <img
-                                  src={item.mediaUrl}
-                                  alt={`${item.name} dish`}
-                                  className="max-h-64 w-full max-w-xl rounded-md object-contain"
-                                />
+                          {(item.description_full !== item.description || item.chef_note) && (
+                            <div className="mb-4 rounded-lg bg-muted/60 p-3 text-card-foreground md:p-4">
+                              {item.description_full !== item.description && (
+                                <p className="mb-2 break-words text-sm text-muted-foreground">
+                                  {item.description_full}
+                                </p>
                               )}
-                              <Badge variant="outline" className="gap-1 text-xs">
-                                {item.mediaType === "video" ? "Video" : "Image"}
-                              </Badge>
+                              {item.chef_note && (
+                                <div className="flex items-center gap-2 text-xs text-sheraton-gold">
+                                  <ChefHat className="h-3 w-3" />
+                                  <span className="break-words italic">{item.chef_note}</span>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -677,7 +820,7 @@ const MenuPage = () => {
 
                           {/* Add to Cart */}
                           <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
-                            <div className="flex items-center gap-3">
+                            {(!isVideoItem || !isMobilePortraitVideo) && <div className="flex items-center gap-3">
                               {cartQuantity > 0 ? (
                                 <div className="flex items-center gap-2">
                                   <Button
@@ -709,16 +852,22 @@ const MenuPage = () => {
                                   Add to Order
                                 </Button>
                               )}
-                            </div>
+                            </div>}
 
                             {item.availability === 0 && (
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="w-full text-sheraton-gold border-sheraton-gold md:w-auto"
+                                className="w-full border-sheraton-gold text-sheraton-gold md:w-auto"
+                                disabled={availabilitySubscriptions.has(item.databaseId || "") || subscribingItemId === item.databaseId}
+                                onClick={() => void requestMenuAvailability(item)}
                               >
-                                <Bell className="h-4 w-4 mr-2" />
-                                Notify When Available
+                                <Bell className="mr-2 h-4 w-4" />
+                                {subscribingItemId === item.databaseId
+                                  ? "Saving request…"
+                                  : availabilitySubscriptions.has(item.databaseId || "")
+                                    ? "You’ll be notified"
+                                    : "Notify When Available"}
                               </Button>
                             )}
                           </div>
@@ -727,8 +876,9 @@ const MenuPage = () => {
                     </CardContent>
                   </Card>
                 );
-              })}
-            </div>
+                })}
+              </div>
+            )}
           </div>
         </div>
 

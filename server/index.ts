@@ -35,9 +35,13 @@ import {
 } from "./routes/platformAdminHotels.js";
 import {
   getHotelTenant,
+  getHotelRewards,
+  updateHotelRewardsEnrollment,
   getPublicHotelBookingData,
   submitHotelComplaint,
   getPublicMenuItems,
+  getPublicMenuVideo,
+  requestHotelMenuAvailability,
   getPublicSpecialEvents,
   getTenantRoomAvailability,
   deleteHotelEventProposal,
@@ -67,9 +71,13 @@ export function createServer() {
   app.post("/api/platform/hotels/verify-domain", verifyPlatformHotelDomain);
   app.post("/api/platform/hotels/activate", activatePlatformHotel);
   app.get("/api/hotel-tenant", getHotelTenant);
+  app.get("/api/hotel-rewards", getHotelRewards);
+  app.post("/api/hotel-rewards/enrollment", updateHotelRewardsEnrollment);
   app.post("/api/hotel-complaints", submitHotelComplaint);
   app.get("/api/hotel-booking-data", getPublicHotelBookingData);
   app.get("/api/hotel-menu-items", getPublicMenuItems);
+  app.get("/api/hotel-menu-video/:attachmentId", getPublicMenuVideo);
+  app.post("/api/hotel-menu-availability", requestHotelMenuAvailability);
   app.get("/api/hotel-events", getPublicSpecialEvents);
   app.post("/api/hotel-event-proposals/submit", submitHotelEventProposal);
   app.post("/api/hotel-event-proposals/review", reviewHotelEventProposal);
