@@ -8,6 +8,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { useToast } from "../hooks/use-toast";
+import { useHotelTenant } from "../lib/hotelTenant";
 import {
   ArrowDownToLine,
   ArrowUpRight,
@@ -65,6 +66,7 @@ const BooksPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
+  const { tenant, loading: tenantLoading } = useHotelTenant();
   const requestedOrganizationId = searchParams.get("organization");
   const isPersonalWorkspace = searchParams.get("workspace") === "personal" || requestedOrganizationId === "personal";
   const [organizationId, setOrganizationId] = useState<string | null>(null);
@@ -118,12 +120,16 @@ const BooksPage = () => {
         const result = await supabase.rpc("get_or_create_personal_books_organization");
         orgId = result.data;
         orgError = result.error;
-      } else if (requestedOrganizationId) {
+      } else if (requestedOrganizationId || tenant?.organizationId) {
         source = "workspace membership";
-        const membership = await supabase.from("books_memberships").select("organization_id").eq("organization_id", requestedOrganizationId).eq("user_id", userData.user.id).maybeSingle();
+        const selectedOrganizationId = tenant?.organizationId || requestedOrganizationId;
+        if (tenant?.organizationId && requestedOrganizationId && requestedOrganizationId !== tenant.organizationId) {
+          throw new Error("This Books workspace does not belong to the active hotel.");
+        }
+        const membership = await supabase.from("books_memberships").select("organization_id").eq("organization_id", selectedOrganizationId).eq("user_id", userData.user.id).maybeSingle();
         if (membership.error) throw membership.error;
         if (!membership.data) throw new Error("You do not have access to this hotel’s Books workspace.");
-        orgId = requestedOrganizationId;
+        orgId = selectedOrganizationId;
       } else {
         source = "business workspace";
         const result = await supabase.rpc("get_or_create_books_organization");
@@ -203,7 +209,10 @@ const BooksPage = () => {
     }
   };
 
-  useEffect(() => { void loadBooks(); }, [isPersonalWorkspace, requestedOrganizationId, isConsolidatedView]);
+  useEffect(() => {
+    if (tenantLoading) return;
+    void loadBooks();
+  }, [isPersonalWorkspace, requestedOrganizationId, isConsolidatedView, tenantLoading, tenant?.organizationId]);
 
   const currency = isConsolidatedView ? targetCurrency : isUsdView ? "USD" : baseCurrency;
   const visibleInvoices = invoices.filter((invoice) => invoice.currency_code.trim() === currency);
